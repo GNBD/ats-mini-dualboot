@@ -78,18 +78,27 @@ returns to the boot manager.
 
 ## License
 
-Split into two parts. See [NOTICE](NOTICE) for details and third-party notices.
+Several licenses apply, not a single one. See [NOTICE](NOTICE) for details and
+third-party notices.
 
 | Part | License |
 |---|---|
 | Boot manager source (sketches, partitions, flash scripts) | [MIT](LICENSE) |
 | Bootloader **binaries** (`bootloader.bin`) | **Apache-2.0** (ESP-IDF derivative) |
+| Application images (`.bin`) | **GPL-3.0** (contain `Rotary`) |
+| Arduino-ESP32 core and external libraries | original terms retained (LGPL-2.1 etc.) |
 
 Things to note:
 
-- **Firmware binaries are GPL-3.0**: they link `Rotary` (GPL-3.0), so distributed
-  binaries are GPL-3.0 combined works. Provide the matching source when
+- **Application images are GPL-3.0**: they link `Rotary` (GPL-3.0), so those
+  images are covered by GPL-3.0. Provide the matching source when
   distributing.
+- **OTA is distribution too**: a `.bin` sent over OTA carries the same
+  obligations as a release download; OTA is not a separate license.
+- **Third-party components**: LovyanGFX (BSD-2), LittleFS (Apache-2.0),
+  ESP-IDF (Apache-2.0), the Arduino core (LGPL-2.1) and others keep their own
+  terms. Full license texts are in [LICENSES/](LICENSES/) (MIT, Apache-2.0,
+  GPL-3.0, LGPL-2.1).
 - **Hardware/images**: may be CC BY-NC-SA 3.0 (non-commercial).
 - This project is not an official product of the upstream projects or hardware
   authors.

@@ -528,7 +528,7 @@ static void drawAboutPage(int page)
       tft.setTextColor(COL_TEXT, COL_BG);
       tft.drawString("Libraries", 8, 38, FONT_SMALL);
       tft.setTextColor(COL_MUTED, COL_BG);
-      tft.drawString("LovyanGFX     MIT", 8, 56, FONT_SMALL);
+      tft.drawString("LovyanGFX     BSD-2-Clause", 8, 56, FONT_SMALL);
       tft.drawString("ESP32 Core    LGPL-2.1", 8, 72, FONT_SMALL);
       tft.drawString("ESP-IDF       Apache-2.0", 8, 88, FONT_SMALL);
       break;

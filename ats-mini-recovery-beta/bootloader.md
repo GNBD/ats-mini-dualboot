@@ -76,5 +76,6 @@ hardware with the recovery-first cycle
 - The patch only touches `components/bootloader_support/src/bootloader_utility.c`.
 - `bootloader.bin` is committed so that CI and normal builds use it without
   requiring an ESP-IDF installation.
-- The bootloader is ESP-IDF code and is distributed under the Apache License 2.0
-  (see the repository `NOTICE`).
+  - The bootloader is ESP-IDF (v5.5.5) code and is distributed under the
+    Apache License 2.0 (see the repository `NOTICE` and
+    `LICENSES/Apache-2.0.txt`).

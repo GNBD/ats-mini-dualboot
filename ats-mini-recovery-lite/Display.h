@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: 2025 ESP32-SI4732 Radio
 // SPDX-FileCopyrightText: 2026 Max Arnold
 // SPDX-License-Identifier: MIT
 
