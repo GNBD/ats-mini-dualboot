@@ -1,0 +1,19 @@
+name: Lint Codebase
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions: {}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Prek
+        uses: j178/prek-action@v2

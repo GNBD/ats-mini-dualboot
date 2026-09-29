@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2025-2026 JIN (GNBD)
+# SPDX-License-Identifier: MIT
+# 8MB (N8R2) partition table - BOOT MANAGER LITE ONLY
+# DO NOT COPY: lite = 8MB N8R2 / beta = 16MB. The two must never mix.
+#   0x0010000 0x280000 app0       (2.5MB, main app)
+#   0x290000  0x280000 app1       (2.5MB, OTA slot)
+#   0x510000  0x150000 ffat       (1.25MB, USB mode storage)
+#   0x660000  0x070000 recovery   (boot manager, 448KB for 370KB image)
+#   0x6D0000  0x0F0000 littlefs   (960KB, schedules/splash)
+#   0x7C0000  0x010000 settings   + 0x7D0000 0x030000 coredump -> ends 0x800000
+# Name,      Type, SubType,  Offset,   Size,     Flags
+nvs,         data, nvs,      0x9000,   0x5000,
+otadata,     data, ota,      0xe000,   0x2000,
+app0,        app,  ota_0,    0x10000,  0x280000,
+app1,        app,  ota_1,    0x290000, 0x280000,
+ffat,        data, fat,      0x510000, 0x150000,
+recovery,    app,  ota_2,    0x660000, 0x70000,
+littlefs,    data, littlefs, 0x6D0000, 0xF0000,
+settings,    data, nvs,      0x7C0000, 0x10000,
+coredump,    data, coredump, 0x7D0000, 0x30000,

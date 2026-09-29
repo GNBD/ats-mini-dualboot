@@ -1,0 +1,2 @@
+﻿# git apply needs byte-identical patch text (no CRLF rewrites)
+ats-mini-recovery-beta/bootloader.patch -text

@@ -1,0 +1,3 @@
+WiFi connect from the web answers the request before switching networks so the session is not dropped mid-request.
+Reject uploads, deletes, and reboots while a flash is running, and let the upload busy state expire on its own if a client disconnects mid-transfer.
+Fix the Get/Delete links breaking on file names containing "&", and escape single quotes when building HTML attributes.

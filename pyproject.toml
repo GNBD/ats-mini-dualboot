@@ -1,0 +1,55 @@
+[project]
+name = "ats-mini"
+version = "0.00"
+requires-python = ">=3.12"
+
+dependencies = [
+  "towncrier",
+  "prek",
+  "sphinx",
+  "furo",
+  "myst_parser",
+  "sphinx-autobuild",
+]
+
+[tool.uv]
+required-version = ">=0.6.8"
+
+[tool.towncrier]
+name = "ATS Mini"
+filename = "CHANGELOG.md"
+template = "changelog/.template.jinja"
+directory = "changelog/"
+underlines = ["", "", ""]
+title_format = "## {version} ({project_date})"
+issue_format = "[#{issue}](https://github.com/GNBD/ats-mini-dualboot/discussions/{issue})"
+
+[[tool.towncrier.type]]
+directory = "removed"
+name = "Removed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "added"
+name = "Added"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "changed"
+name = "Changed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "fixed"
+name = "Fixed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "doc"
+name = "Improved Documentation"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "misc"
+name = "Misc"
+showcontent = false

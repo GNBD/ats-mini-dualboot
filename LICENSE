@@ -1,0 +1,58 @@
+MIT License
+
+Dual-boot / recovery work: Copyright (c) 2025-2026 JIN (GNBD)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Scope of this license
+---------------------
+
+This repository combines parts with different provenance.
+
+1. Dual-boot / recovery source
+
+   The boot manager sketches (ats-mini-recovery-beta, ats-mini-recovery-lite),
+   the partition tables, and the flashing/build scripts (for example
+   ats-mini-recovery-lite/flash-lite.ps1) are provided under this MIT License.
+
+2. Bootloader binaries (not covered by this MIT License)
+
+   ats-mini-recovery-beta/bootloader.bin and ats-mini-recovery-lite/bootloader.bin
+   are modified ESP-IDF builds. ESP-IDF is distributed by Espressif under the
+   Apache License 2.0, so these binaries are covered by Apache-2.0, not by this
+   MIT License. See NOTICE section 4.1 and LICENSES/Apache-2.0.txt.
+
+Third-party components
+----------------------
+
+Files and materials that carry a different copyright or license notice are not
+relicensed under this MIT License. In particular, Rotary.cpp and Rotary.h are
+Copyright 2011 Ben Buxton and licensed under GPL-3.0 (see
+LICENSES/GPL-3.0.txt). Other third-party components remain subject to their own
+license terms; see the NOTICE file and the LICENSES directory.
+
+Firmware binaries
+-----------------
+
+Firmware binaries built from this repository combine GPL-3.0 covered code
+(Rotary; see the NOTICE file) and, for the bootloaders, Apache-2.0 covered
+ESP-IDF code. Distributed firmware binaries are therefore subject to GPL-3.0
+(combined work) and Apache-2.0 (bootloaders). Provide the corresponding source
+code (this repository at the matching commit/tag) and the applicable license
+texts when distributing binaries.

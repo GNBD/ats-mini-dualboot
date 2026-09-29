@@ -1,0 +1,2 @@
+Web actions (boot, flash, upload, delete, download, scan, connect, web on/off) ask for a Yes/No confirmation first.
+Flashing selects the new app as the boot target and reboots into it, both from the web and from the LCD firmware update menu.

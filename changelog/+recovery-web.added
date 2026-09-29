@@ -1,0 +1,3 @@
+Recovery web UI now runs in the background, so the server keeps answering while you use the LCD, and the WiFi card can scan nearby networks and connect without dropping the session.
+Partition card shows used/free space per partition; app images are measured by parsing the image header instead of assuming the partition is full.
+Firmware flashing from the web shows a live progress bar with the real error reason instead of a blank page.
