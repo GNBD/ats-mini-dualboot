@@ -60,7 +60,9 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저(리커버리)** 의 테마 버
 
 ## 플래싱
 
-### 0. 원본 백업 (권장)
+### 원본 백업 (권장)
+
+플래시 전에 현재 flash 전체를 백업해 두세요.
 
 ```
 uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 921600 read-flash 0x0 ALL original-flash.bin
@@ -68,54 +70,40 @@ uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 921600 read-flas
 
 `COM7` 은 실제 포트로 바꾸세요 (Windows: 장치 관리자 → 포트).
 
-### 방법 A — v3.0.0 / v3.1.x 에서 업그레이드 (권장)
+### 어디에 무엇을 올리나
 
-파티션 테이블과 부트로더가 같으므로 **리커버리만 교체**하면 됩니다.
-설정(NVS/settings)과 앱 슬롯은 그대로 유지됩니다.
+파일마다 정해진 주소가 있습니다. **부트 매니저만 바꾸려면 `0x860000` 한 줄만**,
+처음 설치하거나 초기화하려면 아래 표를 전부 올리면 됩니다.
 
-```powershell
-.\flash-recovery.ps1 -Offset 0x860000 -Image .\ats-mini-recovery-3.2.1.bin -Port COM7
+| 파일 | 주소 | 설명 |
+|---|---|---|
+| `ats-mini-bootloader.bin` | `0x0` | recovery-first 커스텀 부트로더 |
+| `ats-mini-partitions.bin` | `0x8000` | 파티션 테이블 |
+| `boot_app0.bin` | `0xe000` | otadata 초기화 (부팅 슬롯 초기값) |
+| `app0.bin` | `0x10000` | 앱 슬롯 0 (앱 슬롯 1은 `0x390000`) |
+| `ats-mini-recovery-3.2.1.bin` | `0x860000` | 부트 매니저 (이 릴리즈) |
+
+전부 한 번에 올리기 (esptool):
+
+```
+uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 write-flash 0x0 ats-mini-bootloader.bin 0x8000 ats-mini-partitions.bin 0xe000 boot_app0.bin 0x10000 app0.bin 0x860000 ats-mini-recovery-3.2.1.bin
 ```
 
-esptool 직접 실행:
+부트 매니저만 바꾸기 (v3.0.0 / v3.1.x 에서 업그레이드 — 설정·앱 슬롯 유지):
 
 ```
 uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 --before default-reset --after hard-reset write-flash 0x860000 ats-mini-recovery-3.2.1.bin
 ```
 
-> 실행 중인 부트 매니저가 hwcdc(USB Serial/JTAG)로 뜨면 `--before default-reset` 로
-> 바로 플래시됩니다. 부트 매니저가 뜨지 않는 상태라면 BOOT+RESET 로 ROM 모드에
-> 들어간 뒤 같은 명령을 실행하세요 (아래 "ROM 다운로드 모드" 참고).
+`flash-recovery.ps1` 를 쓰면 포트·리셋을 자동으로 처리합니다:
 
-### 방법 B — 신규 설치 / v2.0.1 이하에서 올리는 경우
-
-v2.0.1 이하는 파티션 배치가 달라 **전체 복구 플래시**가 필요합니다.
-아래 4개(+앱)를 한 번에 올립니다. `appN.bin` 은 부팅할 앱 슬롯 이미지입니다.
-
-```
-uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 write-flash \
-  0x0      ats-mini-bootloader.bin \
-  0x8000   ats-mini-partitions.bin \
-  0xe000   boot_app0.bin \
-  0x10000  app0.bin \
-  0x860000 ats-mini-recovery-3.2.1.bin
+```powershell
+.\flash-recovery.ps1 -Offset 0x860000 -Image .\ats-mini-recovery-3.2.1.bin -Port COM7
 ```
 
-- `bootloader.bin` (`0x0`) — recovery-first 커스텀 부트로더 (변경 없음)
-- `partitions.bin` (`0x8000`) — 파티션 테이블
-- `boot_app0.bin` (`0xe000`) — otadata 초기화
-- `app0.bin` (`0x10000`) — 첫 앱 (없으면 빈 슬롯으로 두고 나중에 Firmware Update)
-- `recovery` (`0x860000`) — 이 부트 매니저
-
-### 방법 C — 기기에서 업데이트 (OTA)
-
-부트 매니저 부팅 후:
-
-- **Firmware Update → 대상 슬롯 → Network/Local → 파일 선택** 으로 앱을 플래시
-- STA WiFi 연결 시 백그라운드 웹서버(`http://<IP>/`)에서 파일 업로드·플래시
-
-> 부트 매니저 **자신**을 통째로 바꾸려면 방법 A 로 `0x860000` 에 새 이미지를 올리는 것이
-> 가장 안전합니다 (실행 중인 슬롯은 OTA 로 덮어쓸 수 없습니다).
+> 부트 매니저 부팅 후 **Firmware Update** 나 웹서버(`http://<IP>/`)로도 앱을 올릴 수
+> 있습니다. 단, 부트 매니저 자신은 실행 중인 슬롯을 덮어쓸 수 없으므로 위처럼
+> `0x860000` 에 올리는 것이 안전합니다.
 
 ## 조작
 
@@ -150,7 +138,7 @@ BOOT 패드가 아예 없으면 ESP32-S3 GPIO0(핀 27)을 GND에 잠깐 단락�
 ### 부팅 시 "FLASH CHECK" 경고
 
 부트로더 CRC 또는 파티션 테이블이 예상과 다를 때 뜹니다.
-방법 B 의 전체 복구 플래시로 부트로더·파티션을 다시 올리면 해결됩니다.
+`0x0`(부트로더)과 `0x8000`(파티션)을 위 표의 주소로 다시 올리면 해결됩니다.
 
 ## 라이선스
 
