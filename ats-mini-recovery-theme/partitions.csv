@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2025-2026 JIN (GNBD)
+# SPDX-License-Identifier: MIT
+# Name,      Type, SubType,  Offset,   Size,     Flags
+nvs,         data, nvs,      0x9000,   0x5000,
+otadata,     data, ota,      0xe000,   0x2000,
+app0,        app,  ota_0,    0x10000,  0x380000,
+app1,        app,  ota_1,    0x390000, 0x380000,
+ffat,        data, fat,      0x710000, 0x150000,
+recovery,    app,  ota_2,    0x860000, 0x1A0000,
+littlefs,    data, littlefs, 0xA00000, 0x5D0000,
+settings,    data, nvs,      0xFD0000, 0x10000,
+coredump,    data, coredump, 0xFE0000, 0x20000,
