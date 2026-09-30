@@ -1121,7 +1121,7 @@ static void drawMenu(int selected)
 
 static void drawWifiMenu(int selected)
 {
-  static const int icons[WIFI_MENU_COUNT] = {ICON_WIFICFG, ICON_WEB};
+  static const int icons[WIFI_MENU_COUNT] = {ICON_WIFI, ICON_WEB};
   static const uint16_t accs[WIFI_MENU_COUNT] = {COL_ACC, COL_GOLD};
 
   String status;
