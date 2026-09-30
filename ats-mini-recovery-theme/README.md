@@ -101,9 +101,42 @@ uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 --before 
 .\flash-recovery.ps1 -Offset 0x860000 -Image .\ats-mini-recovery-3.2.1.bin -Port COM7
 ```
 
-> 부트 매니저 부팅 후 **Firmware Update** 나 웹서버(`http://<IP>/`)로도 앱을 올릴 수
-> 있습니다. 단, 부트 매니저 자신은 실행 중인 슬롯을 덮어쓸 수 없으므로 위처럼
-> `0x860000` 에 올리는 것이 안전합니다.
+> 부트 매니저 자신은 실행 중인 슬롯을 덮어쓸 수 없으므로, 새 부트 매니저는 위처럼
+> `0x860000` 에 올립니다.
+
+## 앱 올리기 (app0 / app1)
+
+앱(라디오 펌웨어)은 `app0` 또는 `app1` 슬롯에 넣습니다. 어느 슬롯에 넣든 부트
+매니저에서 그 슬롯을 Boot 하면 됩니다.
+
+**1) 부트 매니저에서 (기기에서 바로)**
+
+Firmware Update → 대상 슬롯(App0/App1) → 소스 선택:
+
+- **Local files** — 기기에 저장된 `.bin` 목록에서 선택
+- **Network** — 등록된 URL 목록에서 다운로드
+
+파일을 고르고 확인하면 플래시가 시작됩니다. 진행 패널에 `파일명 -> App0` 처럼
+**무엇을 어디에** 쓰는지 표시됩니다.
+
+**2) 웹서버에서**
+
+WiFi 연결 후 브라우저로 `http://<IP>/` 접속 → `.bin` 업로드 → 슬롯(App0/App1)
+지정 → Flash.
+
+**3) esptool 로 (PC에서)**
+
+`app0` 은 `0x10000`, `app1` 은 `0x390000` 에 씁니다.
+
+```
+uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 write-flash 0x10000 app0.bin
+```
+
+주의:
+
+- 슬롯당 최대 **3.5MB** 입니다.
+- ESP32-S3 앱 이미지여야 합니다 (첫 바이트 `0xE9`). 부트로더·파티션까지 들어 있는
+  통합(merged) 이미지를 넣어도 앱 부분만 추출해 씁니다.
 
 ## 조작
 
@@ -116,19 +149,6 @@ uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 --before 
 | 부팅 1초 | 버튼을 누르면 메뉴, 안 누르면 현재 슬롯 자동 부팅 |
 
 ## 문제 해결
-
-### ROM 다운로드 모드
-
-플래시가 안 되거나 포트가 안 잡히면 수동으로 ROM 모드에 들어갑니다.
-
-1. 수신기 전원을 끕니다
-2. **BOOT** 버튼을 누른 채로
-3. **RESET** 버튼을 눌렀다 뗍니다
-4. **BOOT** 버튼을 뗍니다
-5. 다시 플래시를 시도합니다
-
-BOOT 버튼이 없는 기종은 USB 연결 → BOOT 누른 채 전원 ON → BOOT 떼기 순서입니다.
-BOOT 패드가 아예 없으면 ESP32-S3 GPIO0(핀 27)을 GND에 잠깐 단락시킵니다.
 
 ### 포트가 안 보임
 
