@@ -42,7 +42,10 @@ Upgrading from v3.2.1 needs the new table flashed at `0x8000`. The stale
 board forever is now caught from the splash too: the recovery reads the 32 byte
 superblock header, and when the volume reports more blocks than the partition
 holds it asks once (`Old format found` / `Erase`) and wipes the region with a
-progress bar before anything mounts it. There is no way to decline, because the
+progress bar before anything mounts it. A volume whose header looks correct but
+still claims more space than the partition is caught the same way: it is probed
+once with growth disabled, because that mismatch only shows up when the volume
+is mounted. There is no way to decline, because the
 application cannot boot onto that volume either; a failed erase leaves the
 device in the menu with `littlefs` unmounted instead of starting a boot loop.
 

@@ -15,6 +15,7 @@
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <LittleFS.h>
+#include <esp_littlefs.h>
 #include <Preferences.h>
 #include <esp_wifi.h>
 #include <esp_partition.h>
@@ -2632,6 +2633,34 @@ static bool littlefsSuperblockTooBig(const esp_partition_t *fs, uint32_t *blocks
   return (uint64_t)bc * bs > (uint64_t)fs->size;
 }
 
+// A volume can also claim more blocks than the partition while its superblock
+// header looks fine. That case only shows up once it is mounted, so it is
+// probed with growth disabled: the wrapper mounts with `grow_on_mount`, and
+// esp_littlefs then grows to the partition size, which asserts and reboots the
+// board forever when the on-disk volume is larger. Returns true when the
+// mounted volume reports more bytes than the partition holds.
+static bool littlefsVolumeTooBig(const esp_partition_t *fs)
+{
+  esp_vfs_littlefs_conf_t conf = {};
+  conf.base_path = "/lfsprobe";
+  conf.partition_label = "littlefs";
+  conf.partition = NULL;
+  conf.format_if_mount_failed = false;
+  conf.read_only = true;
+  conf.dont_mount = false;
+  conf.grow_on_mount = false;
+
+  // Blank or corrupt volumes do not mount; those are safe, because the
+  // wrapper's own mount fails before it can grow and is then formatted.
+  if(esp_vfs_littlefs_register(&conf) != ESP_OK) return false;
+
+  size_t total = 0, used = 0;
+  bool tooBig = (esp_littlefs_info("littlefs", &total, &used) == ESP_OK)
+             && (total > fs->size);
+  esp_vfs_littlefs_unregister("littlefs");
+  return tooBig;
+}
+
 // Returns true when littlefs may be mounted. A stale superblock is confirmed
 // with one button and erased with progress (about 20 s for 5.58 MB, once);
 // if that erase fails nothing mounts the volume and the app is not started.
@@ -2642,10 +2671,29 @@ static bool littlefsUpgradeCheck()
   if(!fs) return true;
 
   uint32_t blocks = 0;
-  if(!littlefsSuperblockTooBig(fs, &blocks)) return true;
+  bool headerTooBig = littlefsSuperblockTooBig(fs, &blocks);
 
-  Serial.printf("littlefs: stale superblock %lu blocks for %u B partition -> erase\n",
-                (unsigned long)blocks, (unsigned)fs->size);
+  // A volume whose header looks fine can still claim more blocks than the
+  // partition once mounted, so it is probed too. A blank volume carries no
+  // superblock and is left to the wrapper, which simply formats it.
+  bool probeTooBig = false;
+  if(!headerTooBig)
+  {
+    static const uint8_t magic[8] = {'l', 'i', 't', 't', 'l', 'e', 'f', 's'};
+    uint8_t m[8];
+    probeTooBig = (esp_partition_read(fs, 8, m, sizeof(m)) == ESP_OK)
+               && (memcmp(m, magic, sizeof(magic)) == 0)
+               && littlefsVolumeTooBig(fs);
+  }
+
+  if(!headerTooBig && !probeTooBig) return true;
+
+  if(headerTooBig)
+    Serial.printf("littlefs: stale superblock %lu blocks for %u B partition -> erase\n",
+                  (unsigned long)blocks, (unsigned)fs->size);
+  else
+    Serial.printf("littlefs: volume larger than %u B partition -> erase\n",
+                  (unsigned)fs->size);
 
   gSprite.fillScreen(COL_BG);
   uiDotGrid();
