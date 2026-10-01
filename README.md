@@ -2,6 +2,8 @@
 
 **미완성 (work in progress)** — 크래시, 부팅 실패, 데이터 손실이 발생할 수 있습니다.
 [English](README.en.md)
+«Important Notice:
+This software was originally designed with switching between the HJB firmware and the standard firmware in mind. It was not designed to handle configuration conflicts or shared settings between custom firmwares based on the same firmware source. As a result, settings or other stored data may overlap between such firmwares.»
 
 SI4732 (ESP32-S3) 수신기용 **부트 매니저** 저장소입니다. 전원을 켜면 부트 매니저가
 먼저 실행되어 `app0` / `app1` 중 무엇을 부팅할지 고를 수 있습니다.
