@@ -29,7 +29,7 @@ Three rules:
 
 ## Boot manager variants
 
-### `ats-mini-recovery-beta` — 16MB default (v3.1.0)
+### `ats-mini-recovery-beta` — 16MB default (v3.1.1)
 
 Default boot manager for current 16MB (N16R8) devices.
 

@@ -31,7 +31,7 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저** 저장소입니다. 전원�
 
 ## 부트 매니저 변종
 
-### `ats-mini-recovery-beta` — 16MB 기본 (v3.1.0)
+### `ats-mini-recovery-beta` — 16MB 기본 (v3.1.1)
 
 현재 16MB(N16R8) 기기의 기본 부트 매니저.
 

@@ -53,7 +53,7 @@ static constexpr const lgfx::IFont* FONT_TINY  = &lgfx::fonts::Font0;
 #define COL_KEY     0x1082
 #define COL_KEYSEL  0xFFFF
 
-#define RECOVERY_VERSION "3.1.0"
+#define RECOVERY_VERSION "3.1.1"
 
 // Default: fetch this .txt (one URL per line). Local /update_url.txt and
 // DEFAULT_UPDATE_URLS are fallbacks when the remote list is unavailable.
@@ -590,6 +590,25 @@ static void drawFilePage(String *files, int count, int selected, const char *tar
   tft.setTextDatum(TL_DATUM);
 }
 
+// One row of drawChoiceList. scrollX > 0 shifts the text left inside the row
+// box, so a focused row too wide for the box (long URLs) can be read to the end.
+static void drawChoiceRow(const char *item, int row, bool focused, int scrollX)
+{
+  int y = 58 + row * 24;
+  tft.fillRoundRect(5, y - 2, 310, 22, 4, focused ? COL_TEXT : COL_BG);
+  tft.setTextColor(focused ? COL_BG : COL_TEXT, focused ? COL_TEXT : COL_BG);
+  if(scrollX > 0)
+  {
+    tft.setClipRect(10, y - 2, 305, 20);
+    tft.drawString(item, 15 - scrollX, y, FONT_SMALL);
+    tft.clearClipRect();
+  }
+  else
+  {
+    tft.drawString(item, 15, y, FONT_SMALL);
+  }
+}
+
 static void drawChoiceList(const char *title, const char *hint,
                            const char **items, int itemCount, int selected)
 {
@@ -604,20 +623,7 @@ static void drawChoiceList(const char *title, const char *hint,
   if(end > itemCount) end = itemCount;
 
   for(int i = start; i < end; i++)
-  {
-    int row = i - start;
-    int y = 58 + row * 24;
-    if(i == selected)
-    {
-      tft.fillRoundRect(5, y - 2, 310, 22, 4, COL_TEXT);
-      tft.setTextColor(COL_BG, COL_TEXT);
-    }
-    else
-    {
-      tft.setTextColor(COL_TEXT, COL_BG);
-    }
-    tft.drawString(items[i], 15, y, FONT_SMALL);
-  }
+    drawChoiceRow(items[i], i - start, i == selected, 0);
 
   tft.setTextColor(COL_MUTED, COL_BG);
   if(itemCount > FILE_PAGE_SIZE)
@@ -640,6 +646,13 @@ static int runChoice(const char *title, const char *hint,
   int selected = 0;
   drawChoiceList(title, hint, items, itemCount, selected);
 
+  // Marquee: a focused row wider than the box scrolls until it has passed
+  // completely, then starts over from the head of the item. Four frames per
+  // second; the step is sized so one loop takes about 10 s.
+  int32_t scroll = 0;
+  int32_t step = 1;
+  uint32_t scrollAt = millis();
+
   while(true)
   {
     int8_t d = readEncoder();
@@ -647,7 +660,23 @@ static int runChoice(const char *title, const char *hint,
     {
       selected = (selected + d) % itemCount;
       if(selected < 0) selected += itemCount;
+      scroll = 0;
+      scrollAt = millis();
       drawChoiceList(title, hint, items, itemCount, selected);
+    }
+
+    int32_t width = tft.textWidth(items[selected], FONT_SMALL);
+    if(width > 300 && millis() - scrollAt >= 250)
+    {
+      scrollAt = millis();
+      if(scroll == 0)
+      {
+        step = (width + 45) / 40;        // one loop = ~40 ticks = 10 s
+        if(step < 1) step = 1;
+      }
+      scroll += step;
+      if(scroll > width + 5) scroll = 0; // fully left of the window: loop
+      drawChoiceRow(items[selected], selected % FILE_PAGE_SIZE, true, scroll);
     }
 
     uint32_t h = readButton();
@@ -2572,6 +2601,7 @@ static void drawAboutPage(int page)
       tft.drawString("ESP32 Core    LGPL-2.1", 8, 72, FONT_SMALL);
       tft.drawString("ESP-IDF       Apache-2.0", 8, 88, FONT_SMALL);
       tft.drawString("LittleFS      Apache-2.0", 8, 104, FONT_SMALL);
+      tft.drawString("QR code       Apache-2.0", 8, 120, FONT_SMALL);
       break;
     }
     case 2:
@@ -2582,9 +2612,9 @@ static void drawAboutPage(int page)
       tft.drawString("Original code: MIT", 8, 56, FONT_SMALL);
       tft.drawString("Rotary.cpp/h: GPL-3.0", 8, 72, FONT_SMALL);
       tft.drawString("  Ben Buxton 2011", 8, 88, FONT_SMALL);
-      tft.drawString("Libraries: see page 2", 8, 104, FONT_SMALL);
-      tft.drawString("Hardware: CC BY-NC-SA", 8, 120, FONT_SMALL);
-      tft.drawString("  may apply separately", 8, 136, FONT_SMALL);
+      tft.drawString("Bootloader: Apache-2.0", 8, 104, FONT_SMALL);
+      tft.drawString("Libraries: see page 2", 8, 120, FONT_SMALL);
+      tft.drawString("Hardware: CC BY-NC-SA (separate)", 8, 136, FONT_SMALL);
       tft.drawString("See repo NOTICE + LICENSES", 8, 152, FONT_SMALL);
       break;
     }

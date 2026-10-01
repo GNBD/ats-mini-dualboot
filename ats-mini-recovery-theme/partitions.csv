@@ -1,12 +1,15 @@
 # SPDX-FileCopyrightText: 2025-2026 JIN (GNBD)
 # SPDX-License-Identifier: MIT
 # Name,      Type, SubType,  Offset,   Size,     Flags
+# v4.0.0 DES Table A (Environment 0 active). Table B (Environment 1) differs
+# only in the `settings` offset (0xFBD000) and is stored at 0xFFF000.
 nvs,         data, nvs,      0x9000,   0x5000,
 otadata,     data, ota,      0xe000,   0x2000,
 app0,        app,  ota_0,    0x10000,  0x380000,
 app1,        app,  ota_1,    0x390000, 0x380000,
 ffat,        data, fat,      0x710000, 0x150000,
 recovery,    app,  ota_2,    0x860000, 0x1A0000,
-littlefs,    data, littlefs, 0xA00000, 0x5D0000,
-settings,    data, nvs,      0xFD0000, 0x10000,
-coredump,    data, coredump, 0xFE0000, 0x20000,
+littlefs,    data, littlefs, 0xA00000, 0x595000,
+rec_settings, data, nvs,     0xF95000, 0x8000,
+settings,    data, nvs,      0xF9D000, 0x20000,
+coredump,    data, coredump, 0xFDF000, 0x20000,

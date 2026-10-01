@@ -18,8 +18,10 @@
 #include <Preferences.h>
 #include <esp_wifi.h>
 #include <esp_partition.h>
+#include <esp_flash.h>
 #include <esp_ota_ops.h>
 #include <nvs_flash.h>
+#include <MD5Builder.h>
 #include <qrcode.h>
 #include "Display.h"
 #include "Rotary.h"
@@ -29,7 +31,9 @@
 #define ENCODER_PIN_A        2
 #define ENCODER_PIN_B        1
 #define ENCODER_PUSH_BUTTON 21
-#define STORAGE_PARTITION    "settings"
+// v4.x DES: the recovery keeps its own NVS so wificfg/uicfg survive an
+// environment switch. v4.x.md rule 4 allows exactly this one line.
+#define STORAGE_PARTITION    "rec_settings"
 
 #define WIFI_PAGE_SIZE       4
 #define FILE_PAGE_SIZE       4
@@ -70,7 +74,7 @@ static constexpr const lgfx::IFont* FONT_TINY  = &lgfx::fonts::Font0;
 #define COL_KEY     RGB(7, 14, 7)     // keyboard key face
 #define COL_KEYSEL  RGB(20, 44, 17)   // keyboard selected key (same as COL_ACC)
 
-#define RECOVERY_VERSION "3.2.1"
+#define RECOVERY_VERSION "4.0.0"
 
 // Default: fetch this .txt (one URL per line). Local /update_url.txt and
 // DEFAULT_UPDATE_URLS are fallbacks when the remote list is unavailable.
@@ -102,6 +106,20 @@ static TaskHandle_t webTaskHandle = nullptr;
 static const char *gBootSlot = "App0";
 static bool gBootIsApp1 = false;
 
+// Set when the littlefs volume could not be repaired. Nothing may mount it
+// then and the app must not start either: the stale superblock trips a
+// lfs_fs_grow_ assert and the board reboots forever.
+static bool gLittleFsBlocked = false;
+
+// Set by the one-shot flash task while it erases/writes a slot. Up here
+// because batteryTick() guards its redraw on it, and the sketch preprocessor
+// emits forward declarations above everything past this point.
+static volatile bool gFlashBusy = false;
+
+// Sketch preprocessor forward declares drawEraseList()/runEraseList() above
+// their definition, so the type they take has to exist that early too.
+struct EraseList;
+
 static const char *menu[] = {
   "Boot App0",
   "Boot App1",
@@ -111,17 +129,17 @@ static const char *menu[] = {
 };
 #define MENU_COUNT (sizeof(menu) / sizeof(menu[0]))
 
-// Settings > ...  (WiFi / Brightness / About live here now)
+// Settings > ...  (Network / Brightness / About live here now)
 static const char *settingsMenu[] = {
-  "WiFi",
+  "Network",
   "Brightness",
   "About"
 };
 #define SETTINGS_COUNT (sizeof(settingsMenu) / sizeof(settingsMenu[0]))
 
 static const char *wifiMenu[] = {
-  "WiFi Setting",
-  "WiFi About"
+  "WiFi",
+  "Network About"
 };
 #define WIFI_MENU_COUNT (sizeof(wifiMenu) / sizeof(wifiMenu[0]))
 
@@ -203,8 +221,14 @@ static int8_t readEncoder(bool accel = true)
 // Releasing before 300 ms returns the shorter time (a click).
 static bool gBtnConsumed = false;
 
+// Redrawn once a second from readButton() so the header voltage tracks the
+// supply without any menu having to own a timer.
+static void batteryTick();
+
 static uint32_t readButton()
 {
+  batteryTick();
+
   if(digitalRead(ENCODER_PUSH_BUTTON) != LOW)
   {
     gBtnConsumed = false;
@@ -633,7 +657,12 @@ static float readBatteryVolts()
   return (float)sum / 10.0f * 1.702f / 1000.0f;
 }
 
-// Battery voltage, right aligned so it ends right before rightX.
+// Battery voltage, right aligned so it ends right before rightX. Remembers
+// where it last drew so batteryTick() can refresh just that text.
+static uint32_t gBattDrawnAt = 0;
+static bool gBattValid = false;
+static int gBattRightX = 286;
+
 static void drawBattery(int rightX)
 {
   float v = readBatteryVolts();
@@ -644,6 +673,20 @@ static void drawBattery(int rightX)
   gSprite.setTextColor(col, COL_BG);
   gSprite.drawString(buf, rightX, 5, FONT_SMALL);
   gSprite.setTextDatum(TL_DATUM);
+
+  gBattRightX = rightX;
+  gBattDrawnAt = millis();
+  gBattValid = true;
+}
+
+// The header voltage refreshes every second. Skipped while a flash job owns
+// the sprite, and only after a header has drawn it once.
+static void batteryTick()
+{
+  if(!gBattValid || gFlashBusy || gUiQuiet) return;
+  if(millis() - gBattDrawnAt < 1000) return;
+  drawBattery(gBattRightX);
+  gSprite.pushSprite(0, 0);
 }
 
 static void drawHeader(const char *title, const char *right = nullptr)
@@ -693,6 +736,28 @@ static void saveWebEnabled(bool on)
 {
   if(!prefs.begin("wificfg", false, STORAGE_PARTITION)) return;
   prefs.putBool("web", on);
+  prefs.end();
+}
+
+// The slot the user last chose, kept in the recovery's own settings. otadata
+// cannot be trusted for this: the bootloader patch forces the recovery on every
+// power-up and setup() rewrites otadata to the recovery slot each time, so the
+// application selection does not survive a power cycle on its own. Stores 0 or
+// 1; 0xFF means "no record yet" (fresh install or wiped partition).
+static uint8_t loadBootSlot()
+{
+  if(!prefs.begin("bootcfg", true, STORAGE_PARTITION)) return 0xFF;
+  uint8_t v = prefs.getUChar("slot", 0xFF);
+  prefs.end();
+  return v;
+}
+
+static void saveBootSlot(uint8_t slot)
+{
+  if(!prefs.begin("bootcfg", false, STORAGE_PARTITION)) return;
+  // Rewriting the same value on every auto boot would burn NVS cycles for
+  // nothing, so only commit when the selection actually changed.
+  if(prefs.getUChar("slot", 0xFF) != slot) prefs.putUChar("slot", slot);
   prefs.end();
 }
 
@@ -820,6 +885,34 @@ static bool confirmDialog(const char *title, const char *l1, const char *l2)
   }
 }
 
+// Single button sibling of confirmDialog(): the one action offered is the only
+// one available, so any press continues. Used by the littlefs upgrade prompt,
+// where saying no is not a choice - the app cannot boot onto that volume.
+static void confirmOne(const char *title, const char *l1, const char *l2,
+                       const char *btn)
+{
+  const int by = 112, bw = 96, bh = 18;
+  const int bx = (320 - bw) / 2;
+
+  uiPanel(24, 40, 272, 94, COL_WARN);
+
+  gSprite.setTextDatum(TC_DATUM);
+  gSprite.setTextColor(COL_WARN, COL_PANEL);
+  gSprite.drawString(title, 160, 54, FONT_SMALL);
+  gSprite.setTextColor(COL_TEXT, COL_PANEL);
+  gSprite.drawString(l1, 160, 76, FONT_SMALL);
+  if(l2) gSprite.drawString(l2, 160, 94, FONT_SMALL);
+
+  gSprite.fillRoundRect(bx, by, bw, bh, 4, COL_OK);
+  gSprite.drawRoundRect(bx, by, bw, bh, 4, COL_OK);
+  gSprite.setTextColor(COL_BG, COL_OK);
+  gSprite.drawString(btn, bx + bw / 2, by + 1, FONT_SMALL);
+  gSprite.setTextDatum(TL_DATUM);
+  gSprite.pushSprite(0, 0);
+
+  while(readButton() == 0) delay(10);
+}
+
 // ---------------------------------------------------------------------------
 // Boot helpers
 // ---------------------------------------------------------------------------
@@ -874,24 +967,328 @@ static bool bootloaderOk()
   return ok;
 }
 
-// Partition table present and the recovery still at 0x860000 / 0x1A0000?
-static bool partitionTableOk()
-{
-  uint32_t magic[2];
-  if(!ESP.flashRead(PARTITION_TABLE_ADDR, magic, sizeof(magic))) return false;
+// ---------------------------------------------------------------------------
+// DES: partition table patch
+// ---------------------------------------------------------------------------
+// ENV0 and ENV1 share every entry except `settings`, which points at the
+// environment's own NVS region (0xF9D000 for ENV0, 0xFBD000 for ENV1).
+// Switching therefore means: retarget that one offset in a RAM copy of the
+// canonical table, recompute the MD5 entry over the first num_parts * 32
+// bytes, then erase and rewrite 0x8000. The table is always staged in RAM so
+// no mapped flash pointer survives into the write.
+#define DES_TABLE_SIZE      0xC00u         // slot the bootloader scans
+#define DES_ENTRY_SIZE      32u
+#define DES_MAX_PARTITIONS  64u
+#define DES_MAGIC_ENTRY     0x50AAu
+#define DES_MAGIC_MD5       0xEBEBu
+#define DES_SETTINGS_ENV0   0xF9D000u
+#define DES_SETTINGS_ENV1   0xFBD000u
+#define DES_SETTINGS_SIZE   0x20000u
+#define DES_PT_SECTOR       (PARTITION_TABLE_ADDR / 4096u)
 
-  const uint8_t *m = (const uint8_t *)magic;
-  if(m[0] != 0xAA || m[1] != 0x50)
+static const uint8_t DES_LABEL_SETTINGS[16] = "settings";
+
+// Walks the entry list. Fails when the magic chain or the MD5 terminator is
+// broken; otherwise reports the partition count, the index of the `settings`
+// entry (0xFFFF when absent) and the offset of the MD5 entry.
+static bool desParseTable(const uint8_t *buf, size_t len, uint16_t *numParts,
+                          uint16_t *settingsIdx, size_t *md5Pos)
+{
+  *numParts = 0;
+  *settingsIdx = 0xFFFF;
+  *md5Pos = 0;
+
+  for(size_t pos = 0; pos + DES_ENTRY_SIZE <= len; pos += DES_ENTRY_SIZE)
   {
-    Serial.println("self check: partition table magic missing");
+    uint16_t magic = (uint16_t)buf[pos] | ((uint16_t)buf[pos + 1] << 8);
+
+    if(magic == DES_MAGIC_MD5)
+    {
+      *md5Pos = pos;
+      return *numParts > 0 && *numParts <= DES_MAX_PARTITIONS;
+    }
+    if(magic != DES_MAGIC_ENTRY) return false;
+    if(memcmp(buf + pos + 12, DES_LABEL_SETTINGS, sizeof(DES_LABEL_SETTINGS)) == 0)
+      *settingsIdx = (uint16_t)(pos / DES_ENTRY_SIZE);
+    (*numParts)++;
+  }
+  return false;                             // no MD5 terminator in the slot
+}
+
+// ESP-IDF hashes exactly num_parts * 32 bytes (everything before the MD5
+// entry) and stores the digest in bytes 16..31 of that entry - the same rule
+// gen_esp32part.py and the host side verify_md5.py apply.
+static void desStoreMd5(uint8_t *buf, uint16_t numParts, size_t md5Pos)
+{
+  MD5Builder md5;
+  md5.begin();
+  md5.add(buf, (size_t)numParts * DES_ENTRY_SIZE);
+  md5.calculate();
+  md5.getBytes(buf + md5Pos + 16);
+}
+
+// Retargets the `settings` entry to `env` inside a RAM copy of the table and
+// refreshes the MD5. Fails if the copy does not parse.
+static bool desBuildTable(uint8_t *buf, size_t len, uint8_t env)
+{
+  uint16_t numParts, settingsIdx;
+  size_t md5Pos;
+  if(!desParseTable(buf, len, &numParts, &settingsIdx, &md5Pos)) return false;
+  if(settingsIdx == 0xFFFF) return false;
+
+  size_t e = (size_t)settingsIdx * DES_ENTRY_SIZE;
+  uint32_t off = env ? DES_SETTINGS_ENV1 : DES_SETTINGS_ENV0;
+
+  // Only the offset moves - both environments use the same size, which
+  // desVerifyTable() checks against the source table.
+  for(int i = 0; i < 4; i++) buf[e + 4 + i] = (uint8_t)(off >> (8 * i));
+
+  desStoreMd5(buf, numParts, md5Pos);
+  return true;
+}
+
+// The criteria the offline verifier applies: a parseable magic chain, exactly
+// one `settings` entry at the expected 64KB aligned address inside flash, and
+// a stored MD5 that matches a recomputation.
+static bool desVerifyTable(const uint8_t *buf, size_t len, uint8_t env)
+{
+  uint16_t numParts, settingsIdx;
+  size_t md5Pos;
+  if(!desParseTable(buf, len, &numParts, &settingsIdx, &md5Pos)) return false;
+  if(settingsIdx == 0xFFFF) return false;
+
+  size_t e = (size_t)settingsIdx * DES_ENTRY_SIZE;
+  uint32_t off = 0, size = 0;
+  for(int i = 0; i < 4; i++)
+  {
+    off  |= (uint32_t)buf[e + 4 + i] << (8 * i);
+    size |= (uint32_t)buf[e + 8 + i] << (8 * i);
+  }
+
+  uint32_t want = env ? DES_SETTINGS_ENV1 : DES_SETTINGS_ENV0;
+  if(off != want || size != DES_SETTINGS_SIZE) return false;
+  if(off & 0xFFFu) return false;            // 4KB (only app slots need 64KB)
+  if((uint64_t)off + size > 0x1000000ull) return false;
+
+  uint8_t stored[16];
+  MD5Builder md5;
+  md5.begin();
+  md5.add(buf, (size_t)numParts * DES_ENTRY_SIZE);
+  md5.calculate();
+  md5.getBytes(stored);
+  return memcmp(stored, buf + md5Pos + 16, sizeof(stored)) == 0;
+}
+
+// Reads the canonical table straight from flash and reports which
+// environment its `settings` entry points at. 0/1 on success, 0xFF when the
+// table does not parse or the offset is not one of the two DES regions.
+static uint8_t desGetCurrentEnv()
+{
+  uint8_t *buf = (uint8_t *)malloc(DES_TABLE_SIZE);
+  if(!buf) return 0xFF;
+
+  uint8_t env = 0xFF;
+  if(ESP.flashRead(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE))
+  {
+    uint16_t numParts, settingsIdx;
+    size_t md5Pos;
+    if(desParseTable(buf, DES_TABLE_SIZE, &numParts, &settingsIdx, &md5Pos)
+       && settingsIdx != 0xFFFF)
+    {
+      size_t e = (size_t)settingsIdx * DES_ENTRY_SIZE;
+      uint32_t off = 0;
+      for(int i = 0; i < 4; i++) off |= (uint32_t)buf[e + 4 + i] << (8 * i);
+      if(off == DES_SETTINGS_ENV0) env = 0;
+      else if(off == DES_SETTINGS_ENV1) env = 1;
+    }
+  }
+
+  free(buf);
+  return env;
+}
+
+// IDF treats the bootloader and partition table as write-protected and abort()
+// on a write that reaches them (CONFIG_SPI_FLASH_DANGEROUS_WRITE_ABORTS), so
+// the table cannot be erased with ESP.flashEraseSector as-is. This is the
+// documented toggle; it only affects the window between the two calls below.
+extern "C" esp_err_t esp_flash_set_dangerous_write_protection(esp_flash_t *chip,
+                                                              const bool protect);
+
+// Rewrites the canonical table at 0x8000 so `settings` belongs to `env`. The
+// staged buffer is verified before the sector is erased and again after the
+// write, so any failure before the erase leaves the table byte-for-byte
+// intact. The caller must ESP.restart() afterwards because the running
+// firmware has already cached the old partition list.
+static bool patchPartitions(uint8_t env)
+{
+  // Already pointing where it should be - no reason to rewrite the sector.
+  if(desGetCurrentEnv() == env) return true;
+
+  uint8_t *buf = (uint8_t *)malloc(DES_TABLE_SIZE);
+  if(!buf)
+  {
+    Serial.println("patch: no memory");
     return false;
   }
 
-  const esp_partition_t *rec = esp_partition_find_first(
-    ESP_PARTITION_TYPE_APP,
-    static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_2), NULL);
-  bool ok = rec && rec->address == 0x860000 && rec->size == 0x1A0000;
-  Serial.printf("self check: recovery partition %s\n", ok ? "ok" : "WRONG");
+  bool ok = ESP.flashRead(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE)
+         && desBuildTable(buf, DES_TABLE_SIZE, env)
+         && desVerifyTable(buf, DES_TABLE_SIZE, env);
+  if(!ok)
+  {
+    Serial.println("patch: staged table failed verification");
+    free(buf);
+    return false;
+  }
+
+  esp_flash_set_dangerous_write_protection(esp_flash_default_chip, false);
+  ok = ESP.flashEraseSector(DES_PT_SECTOR)
+    && ESP.flashWrite(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE);
+  esp_flash_set_dangerous_write_protection(esp_flash_default_chip, true);
+  if(!ok)
+  {
+    Serial.println("patch: flash write failed");
+    free(buf);
+    return false;
+  }
+
+  memset(buf, 0, DES_TABLE_SIZE);
+  ok = ESP.flashRead(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE)
+    && desVerifyTable(buf, DES_TABLE_SIZE, env);
+  Serial.printf("patch: env %u -> %s\n", env, ok ? "ok" : "FAILED");
+  free(buf);
+  return ok;
+}
+
+// Canonical Table A (DES ENV0) embedded in the image: 10 entries plus the MD5
+// terminator, exactly the bytes of des/table_a.bin. Everything past 0x160 in
+// the slot is erased flash. Keeping a copy here is what lets the splash check
+// rebuild a table that esptool or an older release overwrote.
+static const uint8_t DES_CANONICAL_TABLE[0x160] = {
+    0xAA, 0x50, 0x01, 0x02, 0x00, 0x90, 0x00, 0x00, 0x00, 0x50, 0x00, 0x00, 0x6E, 0x76, 0x73, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0x50, 0x01, 0x00, 0x00, 0xE0, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x6F, 0x74, 0x61, 0x64,
+    0x61, 0x74, 0x61, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0x50, 0x00, 0x10, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x38, 0x00, 0x61, 0x70, 0x70, 0x30,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0x50, 0x00, 0x11, 0x00, 0x00, 0x39, 0x00, 0x00, 0x00, 0x38, 0x00, 0x61, 0x70, 0x70, 0x31,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0x50, 0x01, 0x81, 0x00, 0x00, 0x71, 0x00, 0x00, 0x00, 0x15, 0x00, 0x66, 0x66, 0x61, 0x74,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0x50, 0x00, 0x12, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00, 0x1A, 0x00, 0x72, 0x65, 0x63, 0x6F,
+    0x76, 0x65, 0x72, 0x79, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0x50, 0x01, 0x83, 0x00, 0x00, 0xA0, 0x00, 0x00, 0x50, 0x59, 0x00, 0x6C, 0x69, 0x74, 0x74,
+    0x6C, 0x65, 0x66, 0x73, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0x50, 0x01, 0x02, 0x00, 0x50, 0xF9, 0x00, 0x00, 0x80, 0x00, 0x00, 0x72, 0x65, 0x63, 0x5F,
+    0x73, 0x65, 0x74, 0x74, 0x69, 0x6E, 0x67, 0x73, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0x50, 0x01, 0x02, 0x00, 0xD0, 0xF9, 0x00, 0x00, 0x00, 0x02, 0x00, 0x73, 0x65, 0x74, 0x74,
+    0x69, 0x6E, 0x67, 0x73, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0x50, 0x01, 0x03, 0x00, 0xF0, 0xFD, 0x00, 0x00, 0x00, 0x02, 0x00, 0x63, 0x6F, 0x72, 0x65,
+    0x64, 0x75, 0x6D, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xEB, 0xEB, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x7B, 0x20, 0x02, 0x65, 0xF3, 0xDF, 0x2D, 0x81, 0x94, 0x15, 0xFB, 0x81, 0x3F, 0x1B, 0xC7, 0x76,
+};
+
+// Entry by entry comparison of the slot in flash against the embedded copy.
+// Only one difference is legal: the `settings` offset, which may point at
+// either DES environment. Everything else - count, order, magic, type,
+// subtype, size, label and the MD5 digest - has to match byte for byte.
+static bool desMatchesCanonical(const uint8_t *buf, size_t len)
+{
+  uint16_t numParts, settingsIdx;
+  size_t md5Pos;
+  if(!desParseTable(buf, len, &numParts, &settingsIdx, &md5Pos)) return false;
+
+  uint16_t cNum, cSettings;
+  size_t cMd5;
+  if(!desParseTable(DES_CANONICAL_TABLE, sizeof(DES_CANONICAL_TABLE),
+                    &cNum, &cSettings, &cMd5)) return false;
+  if(numParts != cNum || settingsIdx != cSettings) return false;
+
+  for(size_t i = 0; i < cNum; i++)
+  {
+    size_t pos = i * DES_ENTRY_SIZE;
+    if(memcmp(buf + pos, DES_CANONICAL_TABLE + pos, DES_ENTRY_SIZE) == 0) continue;
+
+    // The `settings` entry is the only one allowed to differ, and only in its
+    // four offset bytes.
+    if(i != (size_t)cSettings) return false;
+    if(memcmp(buf + pos, DES_CANONICAL_TABLE + pos, 4) != 0) return false;
+    if(memcmp(buf + pos + 8, DES_CANONICAL_TABLE + pos + 8, DES_ENTRY_SIZE - 8) != 0)
+      return false;
+
+    uint32_t off = 0;
+    for(int b = 0; b < 4; b++) off |= (uint32_t)buf[pos + 4 + b] << (8 * b);
+    if(off != DES_SETTINGS_ENV0 && off != DES_SETTINGS_ENV1) return false;
+  }
+
+  uint8_t env = 0;
+  if(settingsIdx != 0xFFFF)
+  {
+    size_t e = (size_t)settingsIdx * DES_ENTRY_SIZE;
+    uint32_t off = 0;
+    for(int b = 0; b < 4; b++) off |= (uint32_t)buf[e + 4 + b] << (8 * b);
+    env = (uint8_t)(off == DES_SETTINGS_ENV1 ? 1 : 0);
+  }
+  return desVerifyTable(buf, len, env);
+}
+
+// Reads the slot and checks it against the embedded canonical table. Silent
+// on pass; names the first entry that differs otherwise.
+static bool partitionTableOk()
+{
+  uint8_t *buf = (uint8_t *)malloc(DES_TABLE_SIZE);
+  if(!buf) { Serial.println("self check: no memory"); return false; }
+
+  bool ok = ESP.flashRead(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE)
+         && desMatchesCanonical(buf, DES_TABLE_SIZE);
+
+  if(!ok)
+  {
+    uint16_t numParts = 0, settingsIdx = 0xFFFF;
+    size_t md5Pos = 0;
+    if(ESP.flashRead(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE)
+       && desParseTable(buf, DES_TABLE_SIZE, &numParts, &settingsIdx, &md5Pos))
+      Serial.printf("self check: partition table differs (%u entries)\n", numParts);
+    else
+      Serial.println("self check: partition table unreadable");
+  }
+  free(buf);
+  return ok;
+}
+
+// Rebuilds the slot from DES_CANONICAL_TABLE. `env` selects which DES
+// environment the `settings` entry points at; ENV0 is the default so a slot
+// that cannot be read at all still comes back to a known state.
+static bool desRebuildTable(uint8_t env)
+{
+  uint8_t *buf = (uint8_t *)malloc(DES_TABLE_SIZE);
+  if(!buf) { Serial.println("rebuild: no memory"); return false; }
+
+  // Everything past the embedded entries is erased flash, not zeroes.
+  memset(buf, 0xFF, DES_TABLE_SIZE);
+  memcpy(buf, DES_CANONICAL_TABLE, sizeof(DES_CANONICAL_TABLE));
+
+  bool ok = desBuildTable(buf, DES_TABLE_SIZE, env)
+         && desVerifyTable(buf, DES_TABLE_SIZE, env);
+  if(!ok)
+  {
+    Serial.println("rebuild: staged table failed verification");
+    free(buf);
+    return false;
+  }
+
+  esp_flash_set_dangerous_write_protection(esp_flash_default_chip, false);
+  ok = ESP.flashEraseSector(DES_PT_SECTOR)
+    && ESP.flashWrite(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE);
+  esp_flash_set_dangerous_write_protection(esp_flash_default_chip, true);
+  if(!ok) Serial.println("rebuild: flash write failed");
+
+  free(buf);
+  if(!ok) return false;
+
+  ok = partitionTableOk();
+  Serial.printf("rebuild: env %u -> %s\n", env, ok ? "ok" : "FAILED");
   return ok;
 }
 
@@ -920,22 +1317,89 @@ static void uiBootWarning(const char *title, const char *l1, uint16_t c1,
   gSprite.pushSprite(0, 0);
 }
 
-// Runs on every boot, while the splash is still on screen: a fast CRC over
-// the bootloader plus the partition table check. Passes silently, only a
-// failure pops up.
+// Splash side status screen: no input needed, it clears itself once the
+// repair below has run. Click skips the wait.
+static void uiSelfCheckStatus(const char *l1, uint16_t c1,
+                              const char *l2, uint16_t c2)
+{
+  gSprite.fillScreen(COL_BG);
+  uiDotGrid();
+  drawHeader("FLASH CHECK");
+
+  uiPanel(24, 44, 272, 76, COL_WARN);
+  gSprite.setTextDatum(TC_DATUM);
+  gSprite.setTextColor(COL_WARN, COL_PANEL);
+  gSprite.drawString("WARNING", 160, 58, FONT_SMALL);
+  gSprite.setTextColor(c1, COL_PANEL);
+  gSprite.drawString(l1, 160, 78, FONT_SMALL);
+  gSprite.setTextColor(c2, COL_PANEL);
+  gSprite.drawString(l2, 160, 98, FONT_SMALL);
+  gSprite.setTextDatum(TL_DATUM);
+
+  uiHintBar("Repairing", "CLICK=SKIP");
+  gSprite.pushSprite(0, 0);
+}
+
+// Runs on every boot while the splash is up. Reads the bootloader image and
+// the partition slot, compares both against what this build shipped with, and
+// stays silent when they agree - the whole check is a few hundred kilobytes
+// of flash reads plus two memcmp passes, well inside the splash window.
+//
+// A partition table that differs is not just reported: the canonical table is
+// embedded in this image, so the slot is rebuilt and the device restarts onto
+// it. A bootloader mismatch cannot be repaired from here and only warns.
 static void flashSelfCheck()
 {
+  uint32_t t0 = millis();
   bool bl = bootloaderOk();
   bool pt = partitionTableOk();
-  if(bl && pt) return;
+  uint32_t elapsed = millis() - t0;
 
-  Serial.println("self check: FAILED -> warning shown");
+  if(bl && pt)
+  {
+    Serial.printf("self check: pass in %lu ms\n", (unsigned long)elapsed);
+    return;
+  }
+
+  if(!pt)
+  {
+    // Keep the environment that is already selected so a rebuild does not
+    // silently flip App0/App1 settings.
+    uint8_t env = desGetCurrentEnv();
+    if(env == 0xFF) env = 0;
+
+    Serial.printf("self check: partition table MISMATCH (%lu ms) -> rebuild\n",
+                  (unsigned long)elapsed);
+    uiSelfCheckStatus("Partitions: WRONG", COL_WARN,
+                      "Rebuilding table...", COL_GOLD);
+
+    uint32_t waitStart = millis();
+    while(millis() - waitStart < 1500 && readButton() == 0) delay(10);
+
+    if(desRebuildTable(env))
+    {
+      gSprite.setTextColor(COL_OK, COL_PANEL);
+      gSprite.setTextDatum(TC_DATUM);
+      gSprite.drawString("Repaired, restarting", 160, 78, FONT_SMALL);
+      gSprite.setTextDatum(TL_DATUM);
+      gSprite.pushSprite(0, 0);
+      delay(800);
+      ESP.restart();
+    }
+
+    uiBootWarning("FLASH CHECK",
+                  "Partitions: WRONG", COL_WARN,
+                  "Repair FAILED", COL_WARN,
+                  "Check the image");
+    return;
+  }
+
+  Serial.printf("self check: bootloader MISMATCH (%lu ms)\n",
+                (unsigned long)elapsed);
   uiBootWarning("FLASH CHECK",
-                bl ? "Bootloader: OK" : "Bootloader: MISMATCH",
-                bl ? COL_OK : COL_WARN,
-                pt ? "Partitions: OK" : "Partitions: WRONG",
-                pt ? COL_OK : COL_WARN,
-                "Retries every boot");
+                "Bootloader: MISMATCH", COL_WARN,
+                "Partitions: OK", COL_OK,
+                "Reflash bootloader");
 }
 
 // A valid ESP32 application image starts with 0xE9 and declares 1..16
@@ -947,6 +1411,8 @@ static bool appImageOk(const esp_partition_t *part)
   if(esp_partition_read(part, 0, hdr, sizeof(hdr)) != ESP_OK) return false;
   return hdr[0] == 0xE9 && hdr[1] >= 1 && hdr[1] <= 16;
 }
+
+static bool setBootSlot(int targetSlot);
 
 static bool bootToApp(esp_partition_subtype_t appSubtype)
 {
@@ -967,19 +1433,39 @@ static bool bootToApp(esp_partition_subtype_t appSubtype)
     return false;                           // stay in the recovery
   }
 
-  esp_ota_set_boot_partition(app);
+  // The environment is a property of the slot, so the table is refreshed
+  // before the slot is committed: patch, then otadata, then restart.
+  if(!setBootSlot(appSubtype == ESP_PARTITION_SUBTYPE_APP_OTA_0 ? 0 : 1))
+  {
+    uiWarn("Env switch failed");
+    return false;                           // stay in the recovery
+  }
+
   ESP.restart();
   return true;
 }
 
-// Selects the freshly flashed app as the next boot target.
+// Selects a boot slot and keeps the partition table in step with it, which is
+// what makes App0 and App1 independent: App0 always reads settings0 and App1
+// always reads settings1, whichever path chose the slot. Returns false when
+// the environment could not be switched, before any slot state is touched.
 static bool setBootSlot(int targetSlot)
 {
+  if(!patchPartitions((uint8_t)targetSlot))
+  {
+    Serial.printf("slot %d: environment switch failed\n", targetSlot);
+    return false;
+  }
+
   esp_partition_subtype_t sub = (targetSlot == 0)
     ? static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_0)
     : static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_1);
   const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_APP, sub, NULL);
-  return p && (esp_ota_set_boot_partition(p) == ESP_OK);
+  bool ok = p && (esp_ota_set_boot_partition(p) == ESP_OK);
+  // Recorded here so every path that commits a slot (auto boot, menu, web)
+  // updates the value setup() reads on the next power-up.
+  if(ok) saveBootSlot((uint8_t)targetSlot);
+  return ok;
 }
 
 static bool bootToApp0()
@@ -1129,7 +1615,7 @@ static void drawWifiMenu(int selected)
   else if(WiFi.status() == WL_CONNECTED) status = WiFi.SSID();
   else status = "Offline";
 
-  drawTilePage("WiFi", NULL, status.c_str(), "CLICK=BACK  HOLD=OPEN",
+  drawTilePage("Network", NULL, status.c_str(), "CLICK=BACK  HOLD=OPEN",
                wifiMenu, icons, accs, WIFI_MENU_COUNT, selected);
 }
 
@@ -1479,7 +1965,6 @@ static size_t computeAppImageSize(File &file, uint32_t appOffset, size_t fileSiz
 // /flashstatus.  gFlashPct: -1 idle, 0..100 running, 101 ok, 102 failed.
 // ---------------------------------------------------------------------------
 
-static volatile bool gFlashBusy = false;
 static volatile bool gWebFlash = false;
 static volatile uint32_t gUploadLastMs = 0;   // 0 = no upload in flight
 static volatile int  gFlashPct = -1;
@@ -2006,36 +2491,51 @@ static void runFirmwareUpdate()
 // Erase
 // ---------------------------------------------------------------------------
 
-static const char *resetItems[] = {"App0", "App1", "Factory Reset", "LittleFS"};
-#define RESET_ITEM_COUNT (sizeof(resetItems) / sizeof(resetItems[0]))
-#define RESET_FACTORY_INDEX 2
-
-static void drawResetMenu(const bool *checked, int selected)
+// Two scopes behind the Erase tile: Factory Reset wipes the per environment
+// settings regions, Erase wipes the app slots and the filesystem. The shared
+// nvs at 0x9000 is deliberately left alone. Tile labels stay short because a
+// three tile row is only 96px wide.
+struct EraseList
 {
-  static const int icons[RESET_ITEM_COUNT] =
-    {ICON_SLOT0, ICON_SLOT1, ICON_TRASH, ICON_DB};
-  static const uint16_t baseAccs[RESET_ITEM_COUNT] =
-    {COL_ACC, COL_ACC, COL_ACC, COL_GOLD};
+  const char *title;
+  bool factory;
+  const char *items[3];
+  const int icons[3];
+  const uint16_t accs[3];
+};
 
-  char buf[RESET_ITEM_COUNT][24];
-  const char *labels[RESET_ITEM_COUNT];
-  uint16_t accs[RESET_ITEM_COUNT];
+static const EraseList kEraseLists[2] = {
+  {"FACTORY RESET", true,
+   {"App0 cfg", "App1 cfg", "Recovery"},
+   {ICON_SLOT0, ICON_SLOT1, ICON_SETTINGS},
+   {COL_ACC, COL_ACC, COL_OK}},
+  {"ERASE", false,
+   {"App0", "App1", "LittleFS"},
+   {ICON_SLOT0, ICON_SLOT1, ICON_DB},
+   {COL_ACC, COL_ACC, COL_GOLD}}
+};
+
+static void drawEraseList(const EraseList &list, const bool *checked, int selected)
+{
+  char buf[3][24];
+  const char *labels[3];
+  uint16_t accs[3];
 
   int checkedCount = 0;
-  for(int i = 0; i < (int)RESET_ITEM_COUNT; i++)
+  for(int i = 0; i < 3; i++)
   {
     snprintf(buf[i], sizeof(buf[i]), "[%c] %s",
-             checked[i] ? 'X' : ' ', resetItems[i]);
+             checked[i] ? 'X' : ' ', list.items[i]);
     labels[i] = buf[i];
-    accs[i] = checked[i] ? COL_WARN : baseAccs[i];
+    accs[i] = checked[i] ? COL_WARN : list.accs[i];
     if(checked[i]) checkedCount++;
   }
 
   char left[24];
-  snprintf(left, sizeof(left), "Checked %d/%d", checkedCount, (int)RESET_ITEM_COUNT);
+  snprintf(left, sizeof(left), "Checked %d/3", checkedCount);
 
-  drawTilePage("ERASE", NULL, left, "CLICK=CHECK  HOLD=ERASE  EMPTY=BACK",
-               labels, icons, accs, RESET_ITEM_COUNT, selected);
+  drawTilePage(list.title, NULL, left, "CLICK=CHECK  HOLD=ERASE  EMPTY=BACK",
+               labels, list.icons, accs, 3, selected);
 }
 
 static void drawResetProgress(const char *label, int percent, int overall)
@@ -2085,21 +2585,184 @@ static bool erasePartitionProgress(const esp_partition_t *part, const char *labe
   return true;
 }
 
-static void eraseMenu()
+// Raw sector erase for the two DES settings regions, which the partition table
+// declares as one "settings" slot at a time and never both at once.
+static bool eraseRegionProgress(uint32_t addr, uint32_t len, const char *label,
+                               int overallStart, int overallEnd)
 {
-  bool checked[RESET_ITEM_COUNT] = {false, false, false, false};
-  const int total = (int)RESET_ITEM_COUNT;
+  if((addr & 0xFFF) || (len & 0xFFF) || len == 0) return false;
+
+  uint32_t sectors = len / 4096;
+  for(uint32_t i = 0; i < sectors; i++)
+  {
+    if(!ESP.flashEraseSector((addr >> 12) + i)) return false;
+    int pct = (int)((uint64_t)(i + 1) * 100 / sectors);
+    drawResetProgress(label, pct, overallStart + (overallEnd - overallStart) * pct / 100);
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// littlefs upgrade guard
+//
+// The superblock sits at the head of block 0: magic at +0x08, block_size at
+// +0x18, block_count at +0x1C (littlefs v2). A volume written by an older
+// layout still reports the size it was formatted with, and littlefs asserts
+// `block_count >= lfs->block_count` on the very first mount, which reboots
+// the board forever. Catch it here, before anything mounts the volume.
+// ---------------------------------------------------------------------------
+
+static bool littlefsSuperblockTooBig(const esp_partition_t *fs, uint32_t *blocks)
+{
+  uint8_t hdr[32];
+  if(esp_partition_read(fs, 0, hdr, sizeof(hdr)) != ESP_OK) return false;
+
+  static const uint8_t magic[8] = {'l', 'i', 't', 't', 'l', 'e', 'f', 's'};
+  if(memcmp(hdr + 8, magic, sizeof(magic)) != 0) return false;   // blank or junk
+
+  uint32_t bs = (uint32_t)hdr[0x18] | ((uint32_t)hdr[0x19] << 8) |
+                ((uint32_t)hdr[0x1A] << 16) | ((uint32_t)hdr[0x1B] << 24);
+  uint32_t bc = (uint32_t)hdr[0x1C] | ((uint32_t)hdr[0x1D] << 8) |
+                ((uint32_t)hdr[0x1E] << 16) | ((uint32_t)hdr[0x1F] << 24);
+  if(blocks) *blocks = bc;
+  if(bs == 0 || bc == 0) return true;
+
+  // Only a volume bigger than its partition can trip the assert; a smaller
+  // one mounts fine and just leaves the tail unused.
+  return (uint64_t)bc * bs > (uint64_t)fs->size;
+}
+
+// Returns true when littlefs may be mounted. A stale superblock is confirmed
+// with one button and erased with progress (about 20 s for 5.58 MB, once);
+// if that erase fails nothing mounts the volume and the app is not started.
+static bool littlefsUpgradeCheck()
+{
+  const esp_partition_t *fs = esp_partition_find_first(
+    ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_LITTLEFS, NULL);
+  if(!fs) return true;
+
+  uint32_t blocks = 0;
+  if(!littlefsSuperblockTooBig(fs, &blocks)) return true;
+
+  Serial.printf("littlefs: stale superblock %lu blocks for %u B partition -> erase\n",
+                (unsigned long)blocks, (unsigned)fs->size);
+
+  gSprite.fillScreen(COL_BG);
+  uiDotGrid();
+  drawHeader("LITTLEFS");
+  confirmOne("LITTLEFS", "Old format found", "Erase it to continue", "Erase");
+
+  gSprite.fillScreen(COL_BG);
+  uiDotGrid();
+  drawHeader("LITTLEFS");
+  if(!erasePartitionProgress(fs, "LittleFS", 0, 100))
+  {
+    Serial.println("littlefs: erase FAILED");
+    uiBootWarning("LITTLEFS",
+                  "Erase FAILED", COL_WARN,
+                  "Volume left as is", COL_WARN,
+                  "Menu only, no boot");
+    return false;
+  }
+
+  drawResetProgress("Done", 100, 100);
+  delay(500);
+  Serial.println("littlefs: erased, volume blank");
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// nvs upgrade guard (settings / rec_settings)
+//
+// Both labels are new in v4.0.0 and, on a board upgraded from v3.2.1, sit on
+// top of the old, larger littlefs: their first 160 KB holds file data instead
+// of NVS pages. Preferences then refuses to open and every write is dropped
+// for good - no crash, just settings that never come back. The recovery owns
+// rec_settings and the applications own settings, so both are checked here,
+// before anything opens them. A partition is erased only when init itself
+// refused, which is the one case where its contents cannot be read back
+// anyway; a volume that opens stays exactly as it is.
+// ---------------------------------------------------------------------------
+
+static const char *nvsErrText(esp_err_t err)
+{
+  if(err == ESP_ERR_NVS_NO_FREE_PAGES) return "No free pages";
+  if(err == ESP_ERR_NVS_NEW_VERSION_FOUND) return "New version found";
+  return "Init failed";
+}
+
+// True when the label can be used, either as it stands or after the one
+// button repair below.
+static bool nvsUpgradeCheckLabel(const char *label, const char *title)
+{
+  const esp_partition_t *part = esp_partition_find_first(
+    ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, label);
+  if(!part)
+  {
+    Serial.printf("nvs: %s partition missing\n", label);
+    return false;
+  }
+
+  esp_err_t err = nvs_flash_init_partition(label);
+  if(err == ESP_OK) return true;
+
+  Serial.printf("nvs: %s init failed %d (%s)\n",
+                label, (int)err, nvsErrText(err));
+
+  gSprite.fillScreen(COL_BG);
+  uiDotGrid();
+  drawHeader(title);
+  confirmOne(title, nvsErrText(err), "Erase it to continue", "Erase");
+
+  gSprite.fillScreen(COL_BG);
+  uiDotGrid();
+  drawHeader(title);
+  if(nvs_flash_erase_partition(label) != ESP_OK)
+  {
+    Serial.printf("nvs: %s erase FAILED\n", label);
+    uiBootWarning(title, "Erase FAILED", COL_WARN,
+                  "Left as it is", COL_WARN, "Not saved");
+    return false;
+  }
+
+  err = nvs_flash_init_partition(label);
+  if(err != ESP_OK)
+  {
+    Serial.printf("nvs: %s re-init failed %d\n", label, (int)err);
+    uiBootWarning(title, "Init FAILED", COL_WARN,
+                  "Left empty", COL_WARN, "Not saved");
+    return false;
+  }
+
+  drawResetProgress("Done", 100, 100);
+  delay(300);
+  Serial.printf("nvs: %s repaired\n", label);
+  return true;
+}
+
+static void nvsUpgradeCheck()
+{
+  nvsUpgradeCheckLabel(STORAGE_PARTITION, "REC SETTINGS");
+  nvsUpgradeCheckLabel("settings", "SETTINGS");
+  // settings belongs to the applications, so unmount it again rather than
+  // hold the DRAM a second NVS instance needs on this screen.
+  nvs_flash_deinit_partition("settings");
+}
+
+static void runEraseList(const EraseList &list)
+{
+  bool checked[3] = {false, false, false};
   int selected = 0;
-  drawResetMenu(checked, selected);
+  drawEraseList(list, checked, selected);
 
   while(true)
   {
     int8_t d = readEncoder();
     if(d)
     {
-      selected = (selected + d) % total;
-      if(selected < 0) selected += total;
-      drawResetMenu(checked, selected);
+      selected = (selected + d) % 3;
+      if(selected < 0) selected += 3;
+      drawEraseList(list, checked, selected);
     }
 
     uint32_t h = readButton();
@@ -2108,13 +2771,13 @@ static void eraseMenu()
     if(h < 300)                                       // click = check toggle
     {
       checked[selected] = !checked[selected];
-      drawResetMenu(checked, selected);
+      drawEraseList(list, checked, selected);
       continue;
     }
 
     int totalUnits = 0;
-    for(int i = 0; i < (int)RESET_ITEM_COUNT; i++)
-      if(checked[i]) totalUnits += (i == RESET_FACTORY_INDEX) ? 2 : 1;
+    for(int i = 0; i < 3; i++)
+      if(checked[i]) totalUnits++;
 
     if(totalUnits == 0) return;                       // hold + empty = back
 
@@ -2122,67 +2785,89 @@ static void eraseMenu()
     snprintf(line1, sizeof(line1), "Erase %d selected now?", totalUnits);
     if(!confirmDialog("ERASE", line1, "This cannot be undone"))
     {
-      drawResetMenu(checked, selected);
+      drawEraseList(list, checked, selected);
       continue;
     }
 
-    const esp_partition_t *nvsPart = NULL, *settingsPart = NULL;
-    if(checked[RESET_FACTORY_INDEX])
-    {
-      nvsPart = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
-        ESP_PARTITION_SUBTYPE_DATA_NVS, "nvs");
-      settingsPart = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
-        ESP_PARTITION_SUBTYPE_DATA_NVS, STORAGE_PARTITION);
-    }
-
-    const esp_partition_t *app0 = NULL, *app1 = NULL, *fs = NULL;
-    if(checked[0]) app0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
-      static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_0), NULL);
-    if(checked[1]) app1 = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
-      static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_1), NULL);
-    if(checked[3]) fs = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
-      ESP_PARTITION_SUBTYPE_DATA_LITTLEFS, NULL);
-
-    if(fs) LittleFS.end();
-    if(checked[RESET_FACTORY_INDEX]) nvs_flash_deinit();
+    // rec_settings is the only NVS this screen touches, so only take the NVS
+    // layer down when it is one of the targets.
+    bool nvsDown = list.factory && checked[2];
+    if(nvsDown) nvs_flash_deinit();
+    if(!list.factory && checked[2]) LittleFS.end();
 
     gSprite.fillScreen(COL_BG);
-    drawHeader("ERASE");
+    drawHeader(list.title);
 
     int unit = 0;
     bool ok = true;
-    for(int i = 0; i < (int)RESET_ITEM_COUNT && ok; i++)
+    for(int i = 0; i < 3 && ok; i++)
     {
       if(!checked[i]) continue;
-      int units = (i == RESET_FACTORY_INDEX) ? 2 : 1;
       int start = unit * 100 / totalUnits;
-      int end = (unit + units) * 100 / totalUnits;
+      int end = (unit + 1) * 100 / totalUnits;
 
-      if(i == RESET_FACTORY_INDEX)
+      if(list.factory)
       {
-        int mid = start + (end - start) / 2;
-        ok = nvsPart && erasePartitionProgress(nvsPart, resetItems[i], start, mid);
-        if(ok) ok = settingsPart && erasePartitionProgress(settingsPart, resetItems[i], mid, end);
+        uint32_t addr = DES_SETTINGS_ENV0;
+        uint32_t len = DES_SETTINGS_SIZE;
+        if(i == 1) addr = DES_SETTINGS_ENV1;
+        else if(i == 2)
+        {
+          const esp_partition_t *rec = esp_partition_find_first(
+            ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS,
+            STORAGE_PARTITION);
+          if(!rec) { ok = false; break; }
+          addr = rec->address;
+          len = rec->size;
+        }
+        ok = eraseRegionProgress(addr, len, list.items[i], start, end);
       }
-      else if(i == 0) ok = app0 && erasePartitionProgress(app0, resetItems[i], start, end);
-      else if(i == 1) ok = app1 && erasePartitionProgress(app1, resetItems[i], start, end);
-      else if(i == 3) ok = fs && erasePartitionProgress(fs, resetItems[i], start, end);
+      else
+      {
+        const esp_partition_t *part = NULL;
+        if(i == 0)
+          part = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
+            static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_0), NULL);
+        else if(i == 1)
+          part = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
+            static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_1), NULL);
+        else
+          part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
+            ESP_PARTITION_SUBTYPE_DATA_LITTLEFS, NULL);
+        ok = part && erasePartitionProgress(part, list.items[i], start, end);
+      }
 
-      unit += units;
+      unit++;
     }
 
     if(!ok)
     {
       gSprite.setTextColor(COL_WARN, COL_BG);
       gSprite.drawString("Erase failed", 10, 150, FONT_SMALL);
-       gSprite.pushSprite(0, 0);
+      gSprite.pushSprite(0, 0);
       delay(2500);
+      if(nvsDown) ESP.restart();                      // NVS is down, re-init
       return;
     }
 
     drawResetProgress("Done", 100, 100);
     delay(1000);
     ESP.restart();
+  }
+}
+
+static void runErase()
+{
+  static const char *modes[2] = {"Factory Reset", "Erase"};
+  static const int modeIcons[2] = {ICON_TRASH, ICON_DB};
+  static const uint16_t modeAccs[2] = {COL_WARN, COL_GOLD};
+
+  while(true)
+  {
+    int mode = runTileChoice("ERASE", "TURN=MOVE", "CLICK=BACK  HOLD=OPEN",
+                             modes, modeIcons, modeAccs, 2);
+    if(mode < 0) return;
+    runEraseList(kEraseLists[mode]);
   }
 }
 
@@ -2259,7 +2944,7 @@ static void drawWifiSetting(int *nets, int netCount, int selected,
                             bool kbOpen)
 {
   gSprite.fillScreen(COL_BG);
-  drawHeader("WIFI SETTING");
+  drawHeader("WIFI");
 
   int listBottom;
   if(kbOpen)
@@ -2345,7 +3030,7 @@ static int kbHandleEncoder(int8_t d)
 static void runWifiSetting()
 {
   gSprite.fillScreen(COL_BG);
-  drawHeader("WIFI SETTING");
+  drawHeader("WIFI");
   gSprite.setTextColor(COL_MUTED, COL_BG);
   gSprite.drawString("Scanning...", 10, 50, FONT_SMALL);
   drawNetIcon();
@@ -2392,7 +3077,7 @@ static void runWifiSetting()
         if(auth == WIFI_AUTH_OPEN)
         {
           gSprite.fillScreen(COL_BG);
-          drawHeader("WIFI SETTING");
+          drawHeader("WIFI");
           gSprite.setTextColor(COL_TEXT, COL_BG);
           gSprite.drawString("Connecting: " + activeSsid, 10, 50, FONT_SMALL);
           bool ok = wifiConnectBlocking(activeSsid, "", WIFI_CONNECT_TIMEOUT);
@@ -2436,7 +3121,7 @@ static void runWifiSetting()
       if(h >= 300)
       {
         gSprite.fillScreen(COL_BG);
-        drawHeader("WIFI SETTING");
+        drawHeader("WIFI");
         gSprite.setTextColor(COL_TEXT, COL_BG);
         gSprite.drawString("Connecting: " + activeSsid, 10, 50, FONT_SMALL);
         bool ok = wifiConnectBlocking(activeSsid, password, WIFI_CONNECT_TIMEOUT);
@@ -3058,7 +3743,7 @@ static void drawWifiAbout()
 {
   gSprite.fillScreen(COL_BG);
   uiDotGrid();
-  drawHeader("WIFI ABOUT");
+  drawHeader("NETWORK ABOUT");
   uiPanel(8, 34, 304, 110, COL_ACC);
 
   gSprite.setTextDatum(TL_DATUM);
@@ -3560,7 +4245,7 @@ static void runRecoveryMenu()
         break;
 
       case 3:
-        eraseMenu();
+        runErase();
         break;
 
       case 4:
@@ -3582,8 +4267,19 @@ void setup()
   delay(300);
   Serial.printf("\n=== RECOVERY BOOT (reset reason %d) ===\n", (int)esp_reset_reason());
 
-  const esp_partition_t *bootPart = esp_ota_get_boot_partition();
-  gBootIsApp1 = bootPart && bootPart->subtype == ESP_PARTITION_SUBTYPE_APP_OTA_1;
+  // The last committed slot is read from the recovery's own settings, so a
+  // power cycle always returns to the same application. otadata is only a
+  // fallback for a device that has no record yet (fresh install or upgrade).
+  uint8_t savedSlot = loadBootSlot();
+  if(savedSlot <= 1)
+  {
+    gBootIsApp1 = (savedSlot == 1);
+  }
+  else
+  {
+    const esp_partition_t *bootPart = esp_ota_get_boot_partition();
+    gBootIsApp1 = bootPart && bootPart->subtype == ESP_PARTITION_SUBTYPE_APP_OTA_1;
+  }
   gBootSlot = gBootIsApp1 ? "App1" : "App0";
   Serial.printf("active boot slot: %s\n", gBootSlot);
 
@@ -3621,7 +4317,7 @@ void setup()
     gSprite.drawString(slotLine, 160, 128, FONT_SMALL);
   }
   gSprite.setTextColor(COL_MUTED, COL_BG);
-  gSprite.drawString("v" RECOVERY_VERSION, 160, 150, FONT_TINY);
+  gSprite.drawString("v" RECOVERY_VERSION " (DES)", 160, 150, FONT_TINY);
   gSprite.setTextDatum(TL_DATUM);
   gSprite.pushSprite(0, 0);
   applyBrightness(loadBrightness());
@@ -3643,6 +4339,20 @@ void setup()
     delay(10);
   }
 
+  // A volume formatted by an older layout cannot be mounted and cannot be
+  // handed to the app either, so it is repaired here before either happens.
+  // If the erase fails, stay in recovery and leave littlefs alone.
+  if(!littlefsUpgradeCheck())
+  {
+    encoderPressed = true;
+    gLittleFsBlocked = true;
+  }
+
+  // Same for the two NVS labels, which fail silently instead of looping: the
+  // menu path and the auto boot path both run this, because the applications
+  // are the ones that would lose their settings.
+  nvsUpgradeCheck();
+
   if(!encoderPressed)
   {
     Serial.printf("step: no encoder -> boot %s\n", gBootSlot);
@@ -3655,7 +4365,7 @@ void setup()
   while(digitalRead(ENCODER_PUSH_BUTTON) == LOW) delay(50);
   delay(100);
 
-  if(!LittleFS.begin(false, "/littlefs", 10, "littlefs"))
+  if(!gLittleFsBlocked && !LittleFS.begin(false, "/littlefs", 10, "littlefs"))
   {
     LittleFS.format();
     LittleFS.begin(false, "/littlefs", 10, "littlefs");

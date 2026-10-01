@@ -541,9 +541,9 @@ static void drawAboutPage(int page)
       tft.drawString("Original code: MIT", 8, 56, FONT_SMALL);
       tft.drawString("Rotary.cpp/h: GPL-3.0", 8, 72, FONT_SMALL);
       tft.drawString("  Ben Buxton 2011", 8, 88, FONT_SMALL);
-      tft.drawString("Libraries: see page 2", 8, 104, FONT_SMALL);
-      tft.drawString("Hardware: CC BY-NC-SA", 8, 120, FONT_SMALL);
-      tft.drawString("  may apply separately", 8, 136, FONT_SMALL);
+      tft.drawString("Bootloader: Apache-2.0", 8, 104, FONT_SMALL);
+      tft.drawString("Libraries: see page 2", 8, 120, FONT_SMALL);
+      tft.drawString("Hardware: CC BY-NC-SA (separate)", 8, 136, FONT_SMALL);
       tft.drawString("See repo NOTICE + LICENSES", 8, 152, FONT_SMALL);
       break;
     }
