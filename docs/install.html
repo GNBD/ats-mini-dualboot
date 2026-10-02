@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ATS Mini Boot Manager — Web Installer</title>
+<style>
+  :root{--bg:#0e1116;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;
+    --acc:#1f6feb;--ok:#3fb950;--warn:#d29922;--del:#da3633;--code:#0d1117}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6}
+  .wrap{max-width:720px;margin:0 auto;padding:24px 18px 64px}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:20px}
+  h1{font-size:20px;margin:0}
+  .sub{color:var(--mut);font-size:13.5px;margin:4px 0 0}
+  .langs{display:flex;gap:6px}
+  .langs button{background:var(--card);color:var(--mut);border:1px solid var(--line);
+    border-radius:8px;padding:6px 11px;font-size:13px;cursor:pointer}
+  .langs button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
+  .card h2{font-size:12px;margin:0 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
+  .card.warn{border-color:var(--warn)}
+  .card.warn p{margin:0;color:var(--warn);font-size:13.5px}
+  .btn{display:inline-block;padding:11px 18px;border:0;border-radius:10px;background:var(--acc);color:#fff;
+    font-size:15px;cursor:pointer}
+  .btn:hover{filter:brightness(1.1)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn.ok{background:#238636}.btn.sm{padding:8px 14px;font-size:13.5px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
+  input[type=file],input[type=text]{background:var(--code);color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:8px;width:100%;margin:6px 0}
+  .bar{height:10px;background:#21262d;border-radius:6px;overflow:hidden;margin:14px 0 6px}
+  .fill{height:100%;width:0%;background:var(--acc);transition:width .15s}
+  #status{font-size:13.5px;color:var(--mut)}
+  #log{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+    height:170px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;
+    white-space:pre-wrap;color:var(--mut);margin-top:14px}
+  .note{color:var(--mut);font-size:12.5px}
+  a{color:#58a6ff}
+  @media(prefers-color-scheme:light){
+    :root{--bg:#f6f8fa;--card:#fff;--line:#d0d7de;--fg:#1f2328;--mut:#57606a;--code:#f0f3f6}
+    a{color:#0969da}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 data-i18n="title"></h1>
+      <p class="sub" data-i18n="sub"></p>
+    </div>
+    <div class="langs" id="langs">
+      <button data-lang="en">English</button>
+      <button data-lang="ru">Русский</button>
+      <button data-lang="ko">한국어</button>
+    </div>
+  </header>
+
+  <div class="card warn"><p data-i18n="warn"></p></div>
+
+  <div class="card">
+    <h2 data-i18n="h_boot"></h2>
+    <p class="note" data-i18n="p_boot"></p>
+    <div class="row"><button class="btn" id="install" data-i18n="install"></button></div>
+    <p class="note" id="relinfo"></p>
+    <p class="note"><a href="https://github.com/GNBD/ats-mini-dualboot/releases" target="_blank" rel="noopener" data-i18n="rel_link"></a></p>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="h_app"></h2>
+    <p class="note" data-i18n="p_app"></p>
+    <input type="file" id="appfile" accept=".bin">
+    <input type="text" id="appurl" data-i18n-ph="">
+    <div class="row">
+      <button class="btn sm" id="app0" data-i18n="app0"></button>
+      <button class="btn sm" id="app1" data-i18n="app1"></button>
+    </div>
+  </div>
+
+  <div class="bar"><div class="fill" id="fill"></div></div>
+  <div id="status"></div>
+  <pre id="log"></pre>
+  <p class="note" data-i18n="note"></p>
+</div>
+
+<script type="module">
+import { ESPLoader, Transport } from "https://unpkg.com/esptool-js/bundle.js";
+
+const I18N = {
+  en:{
+    title:"ATS Mini Boot Manager — Web Installer", sub:"Flash the boot manager (recovery) and app firmware from the browser. Desktop Chrome or Edge.",
+    warn:"Beta software. Back up your flash first. Do not unplug USB during flashing.",
+    h_boot:"1. Install boot manager (recovery)",
+    p_boot:"Downloads the latest release files and writes the bootloader (0x0), partition table (0x8000) and recovery (0x860000).",
+    install:"Install boot manager", rel_link:"All releases (manual download)", h_app:"2. Flash app firmware (optional)",
+    p_app:"Pick an ESP32 application image (.bin / OTA) or paste a direct URL, then write it into a slot.",
+    urlph:"…or paste a direct .bin URL",
+    app0:"Flash to App0", app1:"Flash to App1",
+    note:"Requires Chrome or Edge on a desktop and a secure page (https or localhost).",
+    connecting:"Connecting…", chip:"Chip", fetching:"Fetching files…", writing:"Flashing…",
+    resetting:"Resetting…", done:"Done.", err:"Error",
+    fromRelease:"using files from the latest release", fromLocal:"release download blocked by CORS; using bundled files",
+    nofile:"Choose an .bin file first", notserial:"Web Serial is not available in this browser."
+  },
+  ru:{
+    title:"ATS Mini Boot Manager — веб-установщик", sub:"Прошивка загрузчика (recovery) и приложения прямо из браузера. Chrome или Edge на компьютере.",
+    warn:"Бета. Сначала сделайте резервную копию. Не отключайте USB во время прошивки.",
+    h_boot:"1. Установка загрузчика (recovery)",
+    p_boot:"Скачивает файлы последнего релиза и пишет загрузчик (0x0), таблицу разделов (0x8000) и recovery (0x860000).",
+    install:"Установить загрузчик", rel_link:"Все релизы (скачать вручную)", h_app:"2. Прошивка приложения (необязательно)",
+    p_app:"Выберите образ приложения ESP32 (.bin / OTA) или вставьте прямую ссылку и запишите его в слот.",
+    urlph:"…или вставьте прямую ссылку на .bin",
+    app0:"В App0", app1:"В App1",
+    note:"Нужен Chrome или Edge на компьютере и защищённая страница (https или localhost).",
+    connecting:"Подключение…", chip:"Чип", fetching:"Загрузка файлов…", writing:"Прошивка…",
+    resetting:"Перезагрузка…", done:"Готово.", err:"Ошибка",
+    fromRelease:"файлы из последнего релиза", fromLocal:"загрузка релиза заблокирована CORS; используются встроенные файлы",
+    nofile:"Сначала выберите файл .bin", notserial:"Web Serial недоступен в этом браузере."
+  },
+  ko:{
+    title:"ATS Mini Boot Manager — 웹 설치기", sub:"브라우저에서 부트 매니저(리커버리)와 앱 펌웨어를 바로 플래시합니다. 데스크톱 Chrome/Edge.",
+    warn:"베타 소프트웨어입니다. 먼저 백업하세요. 플래시 중에는 USB를 뽑지 마세요.",
+    h_boot:"1. 부트 매니저(리커버리) 설치",
+    p_boot:"최신 릴리즈 파일을 받아 부트로더(0x0), 파티션 테이블(0x8000), 리커버리(0x860000)를 씁니다.",
+    install:"부트 매니저 설치", rel_link:"전체 릴리즈(수동 다운로드)", h_app:"2. 앱 펌웨어 플래시 (선택)",
+    p_app:"ESP32 앱 이미지(.bin / OTA)를 고르거나 직접 링크를 붙여 슬롯에 씁니다.",
+    urlph:"…또는 .bin 직접 링크 붙여넣기",
+    app0:"App0에 굽기", app1:"App1에 굽기",
+    note:"데스크톱 Chrome/Edge 와 보안 페이지(https 또는 localhost)가 필요합니다.",
+    connecting:"연결 중…", chip:"칩", fetching:"파일 받는 중…", writing:"플래시 중…",
+    resetting:"리셋 중…", done:"완료.", err:"오류",
+    fromRelease:"최신 릴리즈 파일 사용", fromLocal:"릴리즈 다운로드가 CORS로 막혀 내장 파일 사용",
+    nofile:"먼저 .bin 파일을 선택하세요", notserial:"이 브라우저에서는 Web Serial을 쓸 수 없습니다."
+  }
+};
+let lang="en";
+function T(k){ return (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k; }
+function setLang(l){
+  if(!I18N[l]) l="en"; lang=l; document.documentElement.lang=l;
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    const v=I18N[l][el.getAttribute("data-i18n")]; if(v!==undefined) el.textContent=v; });
+  document.querySelectorAll("#langs button").forEach(b=>b.classList.toggle("on",b.dataset.lang===l));
+  document.querySelectorAll("[data-i18n-ph]").forEach(el=>{
+    const v=I18N[l][el.getAttribute("data-i18n-ph")]; if(v!==undefined) el.placeholder=v; });
+  try{localStorage.setItem("ats-inst-lang",l);}catch(e){}
+}
+document.querySelectorAll("#langs button").forEach(b=>b.addEventListener("click",()=>setLang(b.dataset.lang)));
+
+const $=id=>document.getElementById(id);
+const logEl=$("log"), st=$("status"), fill=$("fill");
+function log(s){ logEl.textContent += s+"\n"; logEl.scrollTop=logEl.scrollHeight; }
+function bar(p){ fill.style.width=Math.max(0,Math.min(100,p))+"%"; }
+function status(s){ st.textContent=s; }
+
+const REL_API="https://api.github.com/repos/GNBD/ats-mini-dualboot/releases/latest";
+const NEED=[
+  {name:"ats-mini-bootloader-v4.bin", local:"firmware/ats-mini-bootloader-v4.bin", addr:0x0},
+  {name:"ats-mini-partitions-v4.bin", local:"firmware/ats-mini-partitions-v4.bin", addr:0x8000},
+  {name:"ats-mini-recovery-4.1.0.bin", local:"firmware/ats-mini-recovery-4.1.0.bin", addr:0x860000},
+];
+
+let transport=null, loader=null, busy=false;
+
+async function connect(){
+  if(loader) return loader;
+  if(!navigator.serial) throw new Error(T("notserial"));
+  status(T("connecting"));
+  const port=await navigator.serial.requestPort();
+  transport=new Transport(port,true);
+  loader=new ESPLoader({ transport, baudrate:460800,
+    terminal:{ clean(){logEl.textContent="";}, writeLine(d){log(d);}, write(d){logEl.textContent+=d;} } });
+  const chip=await loader.main();
+  log(T("chip")+": "+chip);
+  return loader;
+}
+
+function totalBytes(fa){ return fa.reduce((s,f)=>s+f.data.length,0); }
+async function flash(fileArray){
+  const total=totalBytes(fileArray);
+  let acc=0; const idxBase=[];
+  for(const f of fileArray){ idxBase.push(acc); acc+=f.data.length; }
+  await loader.writeFlash({
+    fileArray, flashMode:"keep", flashFreq:"keep", flashSize:"keep",
+    eraseAll:false, compress:true,
+    reportProgress:(i,w,t)=>{ const p=Math.round((idxBase[i]+w)/total*100); bar(p); status(T("writing")+" "+p+"%"); }
+  });
+  await loader.after("hard_reset");
+  bar(100);
+}
+
+// The release files are shipped next to this page (same origin): a browser
+// cannot read GitHub release assets directly because the asset CDN sends no
+// CORS header.
+async function getRecoveryFiles(){
+  const out=[];
+  for(const n of NEED){
+    const r=await fetch(n.local);
+    if(!r.ok) throw new Error("missing "+n.local);
+    const data=new Uint8Array(await r.arrayBuffer());
+    out.push({data, address:n.addr});
+    log(n.name+"  "+data.length+" B  @ 0x"+n.addr.toString(16));
+  }
+  return out;
+}
+
+async function doInstall(){
+  if(busy) return; busy=true; $("install").disabled=true;
+  try{
+    await connect();
+    status(T("fetching")); log(T("fetching"));
+    const fa=await getRecoveryFiles();
+    await flash(fa);
+    status(T("done"));
+  }catch(e){ status(T("err")+": "+e.message); log("ERROR: "+e.message); }
+  finally{ busy=false; $("install").disabled=false; }
+}
+
+async function doApp(slot){
+  if(busy) return;
+  const url=$("appurl").value.trim();
+  const file=$("appfile").files[0];
+  if(!url && !file){ status(T("nofile")); return; }
+  busy=true; $("app0").disabled=true; $("app1").disabled=true;
+  try{
+    await connect();
+    let data, name;
+    if(url){
+      const r=await fetch(url); if(!r.ok) throw new Error("HTTP "+r.status);
+      data=new Uint8Array(await r.arrayBuffer()); name=url.split("/").pop()||url;
+    }else{
+      data=new Uint8Array(await file.arrayBuffer()); name=file.name;
+    }
+    const addr=(slot===1)?0x390000:0x10000;
+    log("app "+name+"  "+data.length+" B  @ 0x"+addr.toString(16));
+    await flash([{data,address:addr}]);
+    status(T("done"));
+  }catch(e){ status(T("err")+": "+e.message); log("ERROR: "+e.message); }
+  finally{ busy=false; $("app0").disabled=false; $("app1").disabled=false; }
+}
+
+$("install").onclick=doInstall;
+$("app0").onclick=()=>doApp(0);
+$("app1").onclick=()=>doApp(1);
+
+(function(){
+  let l=null; try{l=localStorage.getItem("ats-inst-lang");}catch(e){}
+  if(!l){ const n=(navigator.language||"en").slice(0,2).toLowerCase();
+    l=(n==="ru")?"ru":(n==="ko")?"ko":"en"; }
+  setLang(l);
+  if(!navigator.serial){ status(T("notserial")); }
+})();
+</script>
+</body>
+</html>

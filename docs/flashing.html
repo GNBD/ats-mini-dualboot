@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ATS Mini Boot Manager — Flashing Guide</title>
+<style>
+  :root{
+    --bg:#0e1116; --card:#161b22; --line:#30363d; --fg:#e6edf3; --mut:#8b949e;
+    --acc:#1f6feb; --ok:#3fb950; --warn:#d29922; --del:#da3633; --code:#0d1117;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6}
+  .wrap{max-width:820px;margin:0 auto;padding:24px 18px 64px}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:22px}
+  h1{font-size:22px;margin:0}
+  .sub{color:var(--mut);font-size:14px;margin:4px 0 0}
+  .langs{display:flex;gap:6px}
+  .langs button{background:var(--card);color:var(--mut);border:1px solid var(--line);
+    border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+  .langs button:hover{border-color:var(--acc);color:var(--fg)}
+  .langs button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  h2{font-size:17px;margin:32px 0 8px;padding:10px 12px;background:var(--card);
+    border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:8px}
+  h3{font-size:15px;margin:22px 0 8px}
+  p,li{font-size:14.5px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:14px 0}
+  .warn{border-color:var(--warn)}
+  .warn h2{margin-top:0;color:var(--warn);background:none;border:0;padding:0}
+  .note{color:var(--mut);font-size:13.5px}
+  code{font-family:ui-monospace,Consolas,monospace;background:var(--code);
+    border:1px solid var(--line);border-radius:6px;padding:1px 5px;font-size:13px}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;overflow:auto;margin:10px 0}
+  pre code{background:none;border:0;padding:0;font-size:13px;white-space:pre}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.5px}
+  ol,ul{padding-left:22px}
+  figure{margin:16px 0;border:1px dashed var(--line);border-radius:12px;overflow:hidden}
+  figure img{display:block;width:100%;height:auto;background:#0a0d12}
+  figure img[src=""]{display:none}
+  figcaption{color:var(--mut);font-size:13px;padding:8px 12px;border-top:1px dashed var(--line)}
+  .steps li{margin:8px 0}
+  footer{margin-top:36px;border-top:1px solid var(--line);padding-top:14px;color:var(--mut);font-size:13px}
+  a{color:#58a6ff}
+  @media(prefers-color-scheme:light){
+    :root{--bg:#f6f8fa;--card:#fff;--line:#d0d7de;--fg:#1f2328;--mut:#57606a;--code:#f0f3f6}
+    a{color:#0969da}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1 data-i18n="title"></h1>
+      <p class="sub" data-i18n="sub"></p>
+    </div>
+    <div class="langs" id="langs">
+      <button data-lang="en">English</button>
+      <button data-lang="ru">Русский</button>
+      <button data-lang="ko">한국어</button>
+    </div>
+  </header>
+
+  <div class="card warn">
+    <h2 data-i18n="warn_h"></h2>
+    <ul>
+      <li data-i18n="warn_1"></li>
+      <li data-i18n="warn_2"></li>
+      <li data-i18n="warn_3"></li>
+    </ul>
+  </div>
+
+  <h2 data-i18n="need_h"></h2>
+  <ul>
+    <li data-i18n="need_1"></li>
+    <li data-i18n="need_2"></li>
+    <li data-i18n="need_3"></li>
+    <li data-i18n="need_4"></li>
+  </ul>
+
+  <h2 data-i18n="where_h"></h2>
+  <p class="note" data-i18n="where_p"></p>
+  <table>
+    <thead>
+      <tr><th data-i18n="th_file"></th><th data-i18n="th_addr"></th><th data-i18n="th_what"></th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>ats-mini-bootloader-v4.bin</code></td><td><code>0x0</code></td><td data-i18n="w_boot"></td></tr>
+      <tr><td><code>ats-mini-partitions-v4.bin</code></td><td><code>0x8000</code></td><td data-i18n="w_pt"></td></tr>
+      <tr><td><code>ats-mini-recovery-4.1.0.bin</code></td><td><code>0x860000</code></td><td data-i18n="w_rec"></td></tr>
+      <tr><td><code>app0.bin</code></td><td><code>0x10000</code></td><td data-i18n="w_app0"></td></tr>
+      <tr><td><code>app1.bin</code></td><td><code>0x390000</code></td><td data-i18n="w_app1"></td></tr>
+    </tbody>
+  </table>
+
+  <h2 data-i18n="rec_h"></h2>
+
+  <h3 data-i18n="methodA_h"></h3>
+  <p class="note" data-i18n="methodA_p"></p>
+  <ol class="steps">
+    <li data-i18n="b1"></li>
+    <li data-i18n="b2"></li>
+    <li data-i18n="b3"></li>
+  </ol>
+  <table>
+    <thead><tr><th data-i18n="th_file"></th><th data-i18n="th_addr"></th></tr></thead>
+    <tbody>
+      <tr><td><code>ats-mini-bootloader-v4.bin</code></td><td><code>0x0</code></td></tr>
+      <tr><td><code>ats-mini-partitions-v4.bin</code></td><td><code>0x8000</code></td></tr>
+      <tr><td><code>ats-mini-recovery-4.1.0.bin</code></td><td><code>0x860000</code></td></tr>
+    </tbody>
+  </table>
+  <ol class="steps" start="4">
+    <li data-i18n="b4"></li>
+    <li data-i18n="b5"></li>
+  </ol>
+  <figure><img src="img/esptool-js.jpg" alt="esptool-js"><figcaption data-i18n="cap_esptooljs"></figcaption></figure>
+
+  <h3 data-i18n="methodB_h"></h3>
+  <p class="note" data-i18n="methodB_p"></p>
+
+  <h4 class="h4" data-i18n="b_rec_h"></h4>
+  <p data-i18n="b_rec_p"></p>
+  <pre><code>uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 \
+  --before default-reset --after hard-reset \
+  write-flash 0x860000 ats-mini-recovery-4.1.0.bin</code></pre>
+
+  <h4 class="h4" data-i18n="b_full_h"></h4>
+  <p data-i18n="b_full_p"></p>
+  <pre><code>uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 \
+  write-flash 0x0 ats-mini-bootloader-v4.bin \
+              0x8000 ats-mini-partitions-v4.bin \
+              0x860000 ats-mini-recovery-4.1.0.bin</code></pre>
+  <p class="note" data-i18n="b_note"></p>
+  <figure><img src="img/esptool.png" alt="esptool"><figcaption data-i18n="cap_esptool"></figcaption></figure>
+
+  <h2 data-i18n="fw_h"></h2>
+  <p class="note" data-i18n="fw_p"></p>
+  <ol class="steps">
+    <li data-i18n="a1"></li>
+    <li data-i18n="a2"></li>
+    <li data-i18n="a3"></li>
+    <li data-i18n="a4"></li>
+    <li data-i18n="a5"></li>
+  </ol>
+  <figure><img src="img/board-usb.jpg" alt="USB"><figcaption data-i18n="cap_usb"></figcaption></figure>
+  <figure><img src="img/menu.jpg" alt="Menu"><figcaption data-i18n="cap_menu"></figcaption></figure>
+  <figure><img src="img/web-ip.jpg" alt="Web address"><figcaption data-i18n="cap_ip"></figcaption></figure>
+  <figure><img src="img/web-upload.jpg" alt="Web upload"><figcaption data-i18n="cap_upload"></figcaption></figure>
+
+  <h2 data-i18n="ts_h"></h2>
+  <h3 data-i18n="ts1_h"></h3><p data-i18n="ts1_p"></p>
+  <h3 data-i18n="ts2_h"></h3><p data-i18n="ts2_p"></p>
+  <h3 data-i18n="ts3_h"></h3><p data-i18n="ts3_p"></p>
+
+  <footer>
+    <span data-i18n="foot"></span>
+    <a href="https://github.com/GNBD/ats-mini-dualboot" target="_blank" rel="noopener">github.com/GNBD/ats-mini-dualboot</a>
+    &middot;
+    <a href="https://github.com/GNBD/ats-mini-dualboot/releases" target="_blank" rel="noopener">Releases</a>
+  </footer>
+</div>
+
+<script>
+const I18N = {
+  en: {
+    title:"ATS Mini Boot Manager — Flashing Guide",
+    sub:"How to flash (update) the boot manager (recovery), and how to upload radio firmware to app0 / app1.",
+    warn_h:"Before you flash",
+    warn_1:"This is beta software. Back up your flash first — a wrong write can wipe settings or, worst case, require a USB reflash.",
+    warn_2:"16MB (N16R8) boards only. Do not use on 8MB (N8R2) or other flash sizes.",
+    warn_3:"Do not unplug USB or cut power while a flash is running.",
+    need_h:"What you need",
+    need_1:"ATS Mini (ESP32-S3, 16MB flash + 8MB PSRAM).",
+    need_2:"A USB <b>data</b> cable (not charge-only) and a PC.",
+    need_3:"For Method A: desktop Chrome or Edge (WebSerial).",
+    need_4:"For Method B: Python + <code>esptool</code> (or just <code>uvx</code>).",
+    where_h:"What goes where",
+    where_p:"Numbers are flash offsets. Write only what you need to change.",
+    th_file:"File", th_addr:"Offset", th_what:"What it is",
+    w_boot:"Recovery-first custom bootloader.",
+    w_pt:"Partition table (DES, Table A).",
+    w_rec:"The boot manager itself (recovery).",
+    w_app0:"Radio firmware in slot 0.",
+    w_app1:"Radio firmware in slot 1.",
+    rec_h:"Flash the boot manager (recovery)",
+    methodA_h:"Method A — esptool-js in the browser (recommended)",
+    methodA_p:"Flash the recovery from a web page — nothing to install. Desktop Chrome or Edge is required.",
+    b1:"Open <a href=\"https://espressif.github.io/esptool-js/\" target=\"_blank\" rel=\"noopener\">espressif.github.io/esptool-js</a> in Chrome or Edge.",
+    b2:"Click <b>Connect</b> and choose the board's serial port.",
+    b3:"Download these three files from <a href=\"https://github.com/GNBD/ats-mini-dualboot/releases\" target=\"_blank\" rel=\"noopener\">Releases</a> and add them with these offsets:",
+    b4:"Click <b>Program</b> and wait for 100%. Do not unplug.",
+    b5:"When it finishes, reset the board — the boot manager starts.",
+    cap_esptooljs:"esptool-js: add the files with their offsets, then Program.",
+    methodB_h:"Method B — esptool (command line)",
+    methodB_p:"For scripts or PCs without a WebSerial browser. Replace <code>COM7</code> with your port.",
+    b_rec_h:"Update the boot manager only (keeps settings and app slots)",
+    b_rec_p:"Use this to go from an older version to v4.1.0 — only the recovery partition is rewritten.",
+    b_full_h:"Full install (first time, or full reset)",
+    b_full_p:"Writes the bootloader, partition table and boot manager in one go.",
+    b_note:"<b>COM7</b> → your serial port. Windows: Device Manager → Ports.",
+    cap_esptool:"Run the esptool command in a terminal.",
+    fw_h:"Upload app firmware (app0 / app1)",
+    fw_p:"This is for the radio firmware, not the recovery. Use the boot manager's own web UI.",
+    a1:"Connect the board with a USB data cable.",
+    a2:"Hold the encoder button to open the menu.",
+    a3:"The web address (IP) is shown at the bottom of the menu.",
+    a4:"Open that address in a browser (same Wi-Fi). In AP mode use <code>http://192.168.4.1/</code>.",
+    a5:"Go to <b>Firmware</b>, pick a <code>.bin</code>, choose <code>Upload &amp; flash to App0/App1</code>, press Upload.",
+    cap_usb:"Connect the board with a USB data cable.",
+    cap_menu:"Hold the encoder to open the menu.",
+    cap_ip:"The web address is shown at the bottom of the menu.",
+    cap_upload:"Firmware tab: pick a file and press Upload.",
+    ts_h:"Troubleshooting",
+    ts1_h:"No COM port / cannot connect",
+    ts1_p:"Use a data cable, install the USB-serial driver, and hold BOOT while plugging in to force download mode if needed.",
+    ts2_h:"\"invalid header\" or boot loop",
+    ts2_p:"A slot is empty or corrupt. Reflash the boot manager (<code>0x860000</code>), then upload firmware to app0 / app1.",
+    ts3_h:"\"bootloader MISMATCH\" warning",
+    ts3_p:"The bootloader on the board is not the one this build expects. Reflash <code>ats-mini-bootloader-v4.bin</code> at <code>0x0</code>.",
+    foot:"More details and downloads:"
+  },
+  ru: {
+    title:"ATS Mini Boot Manager — руководство по прошивке",
+    sub:"Как прошить (обновить) загрузчик (recovery) и как загрузить прошивку радиостанции в app0 / app1.",
+    warn_h:"Перед прошивкой",
+    warn_1:"Это бета-версия. Сначала сделайте резервную копию — неверная запись может стереть настройки, а в худшем случае потребуется перепрошивка через USB.",
+    warn_2:"Только платы 16 МБ (N16R8). Не используйте на 8 МБ (N8R2) и других размерах flash.",
+    warn_3:"Не отключайте USB и не обесточивайте устройство во время записи.",
+    need_h:"Что понадобится",
+    need_1:"ATS Mini (ESP32-S3, 16 МБ flash + 8 МБ PSRAM).",
+    need_2:"USB-кабель для <b>данных</b> (не только для зарядки) и ПК.",
+    need_3:"Для способа A: Chrome или Edge на компьютере (WebSerial).",
+    need_4:"Для способа B: Python + <code>esptool</code> (или просто <code>uvx</code>).",
+    where_h:"Что куда пишется",
+    where_p:"Числа — смещения во flash. Пишите только то, что нужно изменить.",
+    th_file:"Файл", th_addr:"Смещение", th_what:"Что это",
+    w_boot:"Кастомный загрузчик (сначала recovery).",
+    w_pt:"Таблица разделов (DES, Table A).",
+    w_rec:"Сам загрузчик-менеджер (recovery).",
+    w_app0:"Прошивка радиостанции в слоте 0.",
+    w_app1:"Прошивка радиостанции в слоте 1.",
+    rec_h:"Прошивка загрузчика (recovery)",
+    methodA_h:"Способ A — esptool-js в браузере (рекомендуется)",
+    methodA_p:"Прошить recovery из веб-страницы — ничего устанавливать не нужно. Нужен Chrome или Edge на компьютере.",
+    b1:"Откройте <a href=\"https://espressif.github.io/esptool-js/\" target=\"_blank\" rel=\"noopener\">espressif.github.io/esptool-js</a> в Chrome или Edge.",
+    b2:"Нажмите <b>Connect</b> и выберите COM-порт платы.",
+    b3:"Скачайте эти три файла со страницы <a href=\"https://github.com/GNBD/ats-mini-dualboot/releases\" target=\"_blank\" rel=\"noopener\">Releases</a> и добавьте их со смещениями:",
+    b4:"Нажмите <b>Program</b> и дождитесь 100%. Не отключайте кабель.",
+    b5:"После завершения перезагрузите плату — запустится загрузчик.",
+    cap_esptooljs:"esptool-js: добавьте файлы со смещениями, затем Program.",
+    methodB_h:"Способ B — esptool (командная строка)",
+    methodB_p:"Для скриптов или ПК без WebSerial. Замените <code>COM7</code> на свой порт.",
+    b_rec_h:"Обновить только загрузчик (настройки и слоты сохраняются)",
+    b_rec_p:"Для перехода со старой версии на v4.1.0 — перезаписывается только раздел recovery.",
+    b_full_h:"Полная установка (впервые или полный сброс)",
+    b_full_p:"Записывает загрузчик, таблицу разделов и менеджер сразу.",
+    b_note:"<b>COM7</b> → ваш последовательный порт. Windows: Диспетчер устройств → Порты.",
+    cap_esptool:"Выполните команду esptool в терминале.",
+    fw_h:"Загрузка прошивки приложения (app0 / app1)",
+    fw_p:"Это для прошивки радиостанции, а не для recovery. Используйте веб-интерфейс самого загрузчика.",
+    a1:"Подключите плату USB-кабелем для данных.",
+    a2:"Удерживайте энкодер, чтобы открыть меню.",
+    a3:"Внизу меню показан веб-адрес (IP).",
+    a4:"Откройте этот адрес в браузере (в той же сети Wi-Fi). В режиме AP: <code>http://192.168.4.1/</code>.",
+    a5:"Откройте <b>Firmware</b>, выберите <code>.bin</code>, укажите <code>Upload &amp; flash to App0/App1</code> и нажмите Upload.",
+    cap_usb:"Подключите плату USB-кабелем для данных.",
+    cap_menu:"Удерживайте энкодер, чтобы открыть меню.",
+    cap_ip:"Веб-адрес показан внизу меню.",
+    cap_upload:"Вкладка Firmware: выберите файл и нажмите Upload.",
+    ts_h:"Решение проблем",
+    ts1_h:"Нет COM-порта / не подключается",
+    ts1_p:"Используйте кабель для данных, установите драйвер USB-serial; при необходимости удерживайте BOOT при подключении.",
+    ts2_h:"«invalid header» или циклическая перезагрузка",
+    ts2_p:"Слот пуст или повреждён. Перепрошейте загрузчик (<code>0x860000</code>), затем загрузите прошивку в app0 / app1.",
+    ts3_h:"Предупреждение «bootloader MISMATCH»",
+    ts3_p:"Загрузчик на плате не тот, что ожидает эта сборка. Перепрошейте <code>ats-mini-bootloader-v4.bin</code> по адресу <code>0x0</code>.",
+    foot:"Подробности и загрузки:"
+  },
+  ko: {
+    title:"ATS Mini 부트 매니저 — 플래싱 가이드",
+    sub:"부트 매니저(리커버리)를 플래시(업데이트)하는 방법과, 라디오 펌웨어를 app0 / app1 에 올리는 방법입니다.",
+    warn_h:"플래싱 전 주의",
+    warn_1:"베타 소프트웨어입니다. 먼저 백업하세요 — 잘못 쓰면 설정이 지워지거나, 최악의 경우 USB 재플래시가 필요합니다.",
+    warn_2:"16MB(N16R8) 기기 전용입니다. 8MB(N8R2) 등 다른 flash 크기에는 쓰지 마세요.",
+    warn_3:"플래시 중에는 USB 케이블을 뽑거나 전원을 끊지 마세요.",
+    need_h:"준비물",
+    need_1:"ATS Mini (ESP32-S3, 16MB flash + 8MB PSRAM).",
+    need_2:"USB <b>데이터</b> 케이블(충전 전용 아님)과 PC.",
+    need_3:"방법 A: 데스크톱 Chrome/Edge (WebSerial).",
+    need_4:"방법 B: Python + <code>esptool</code> (또는 <code>uvx</code>).",
+    where_h:"어디에 무엇을 쓰나",
+    where_p:"숫자는 flash 주소(오프셋)입니다. 실제로 바꿀 것만 쓰면 됩니다.",
+    th_file:"파일", th_addr:"주소", th_what:"설명",
+    w_boot:"recovery-first 커스텀 부트로더.",
+    w_pt:"파티션 테이블 (DES, Table A).",
+    w_rec:"부트 매니저 본체 (리커버리).",
+    w_app0:"슬롯 0 의 라디오 펌웨어.",
+    w_app1:"슬롯 1 의 라디오 펌웨어.",
+    rec_h:"부트 매니저(리커버리) 플래싱",
+    methodA_h:"방법 A — 브라우저 esptool-js (권장)",
+    methodA_p:"설치 없이 웹에서 리커버리를 바로 플래시합니다. 데스크톱 Chrome/Edge 필요.",
+    b1:"<a href=\"https://espressif.github.io/esptool-js/\" target=\"_blank\" rel=\"noopener\">espressif.github.io/esptool-js</a> 를 Chrome/Edge 에서 엽니다.",
+    b2:"<b>Connect</b> 를 눌러 기기의 시리얼 포트를 선택합니다.",
+    b3:"<a href=\"https://github.com/GNBD/ats-mini-dualboot/releases\" target=\"_blank\" rel=\"noopener\">Releases</a> 에서 이 3개 파일을 내려받아 아래 주소로 추가합니다:",
+    b4:"<b>Program</b> 을 누르고 100%까지 기다립니다. 케이블 분리 금지.",
+    b5:"끝나면 기기를 리셋하면 부트 매니저가 뜹니다.",
+    cap_esptooljs:"esptool-js: 파일과 주소를 넣고 Program 버튼.",
+    methodB_h:"방법 B — esptool (명령어)",
+    methodB_p:"스크립트 또는 WebSerial 미지원 PC용. <code>COM7</code> 은 실제 포트로.",
+    b_rec_h:"부트 매니저만 새 버전으로 (설정·앱 슬롯 유지)",
+    b_rec_p:"구버전 → v4.1.0 업데이트. 리커버리 파티션만 다시 씁니다.",
+    b_full_h:"처음 설치 (또는 전체 초기화)",
+    b_full_p:"부트로더·파티션 테이블·부트 매니저를 한 번에 씁니다.",
+    b_note:"<b>COM7</b> → 실제 시리얼 포트. Windows: 장치 관리자 → 포트.",
+    cap_esptool:"터미널에서 esptool 명령을 실행합니다.",
+    fw_h:"앱 펌웨어 올리기 (app0 / app1)",
+    fw_p:"리커버리가 아니라 라디오 펌웨어용입니다. 부트 매니저 자체 웹 UI를 사용합니다.",
+    a1:"USB 데이터 케이블로 기기를 연결합니다.",
+    a2:"엔코더 버튼을 길게 눌러 메뉴를 엽니다.",
+    a3:"메뉴 하단에 웹 주소(IP)가 표시됩니다.",
+    a4:"같은 Wi-Fi에서 브라우저로 그 주소를 엽니다. AP 모드면 <code>http://192.168.4.1/</code>.",
+    a5:"<b>Firmware</b> 탭에서 <code>.bin</code> 선택 → <code>Upload &amp; flash to App0/App1</code> → Upload.",
+    cap_usb:"USB 데이터 케이블로 기기를 연결합니다.",
+    cap_menu:"엔코더를 길게 눌러 메뉴를 엽니다.",
+    cap_ip:"메뉴 하단에 웹 주소가 표시됩니다.",
+    cap_upload:"Firmware 탭: 파일을 고르고 Upload.",
+    ts_h:"문제 해결",
+    ts1_h:"COM 포트가 없거나 연결 안 됨",
+    ts1_p:"데이터 케이블을 쓰고 USB-시리얼 드라이버를 설치하세요. 필요하면 연결 시 BOOT 버튼을 누르고 있으세요.",
+    ts2_h:"\"invalid header\" 또는 무한 재부팅",
+    ts2_p:"슬롯이 비었거나 손상됨. 부트 매니저(<code>0x860000</code>)를 다시 쓰고, app0 / app1 에 펌웨어를 올리세요.",
+    ts3_h:"\"bootloader MISMATCH\" 경고",
+    ts3_p:"보드의 부트로더가 이 빌드가 기대하는 것과 다름. <code>ats-mini-bootloader-v4.bin</code> 을 <code>0x0</code> 에 다시 쓰세요.",
+    foot:"자세한 내용과 다운로드:"
+  }
+};
+
+function setLang(lang){
+  if(!I18N[lang]) lang = "en";
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    const k = el.getAttribute("data-i18n");
+    const v = I18N[lang][k];
+    if(v !== undefined) el.innerHTML = v;
+  });
+  document.querySelectorAll("#langs button").forEach(b=>
+    b.classList.toggle("on", b.dataset.lang === lang));
+  try{ localStorage.setItem("ats-doc-lang", lang); }catch(e){}
+}
+document.querySelectorAll("#langs button").forEach(b=>
+  b.addEventListener("click", ()=> setLang(b.dataset.lang)));
+(function(){
+  let lang = null;
+  try{ lang = localStorage.getItem("ats-doc-lang"); }catch(e){}
+  if(!lang){
+    const n = (navigator.language || "en").slice(0,2).toLowerCase();
+    lang = (n === "ru") ? "ru" : (n === "ko") ? "ko" : "en";
+  }
+  setLang(lang);
+})();
+</script>
+</body>
+</html>
