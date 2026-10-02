@@ -34,8 +34,9 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저(리커버리)** 의 테마 버
   섞이지 않습니다**.
 - **Partition** — `Info`(파티션·사용량), `Repair`(정본 테이블 복구), `Resize`(app0/app1
   경계를 0.5M 단위, 각 1.0~6.0M 로 이동, **양 슬롯이 비었을 때만**).
-- **설정 백업** — `Settings > Backup` 에서 슬롯 설정(`settings`)을 `.nvs` 파일로
-  내보내고(LittleFS) 다시 불러옵니다.
+- **설정 백업 (실험적)** — `Settings > Backup` 에서 슬롯 설정(`settings`)을 `.nvs` 파일로
+  내보내고(LittleFS) 다시 불러옵니다. 앱이 설정을 다른 곳에 저장할 수도 있어, 복원이
+  모든 설정을 되돌리지는 않을 수 있습니다.
 - **파일 관리 · 웹 계정** — `Settings > LittleFS` 에서 파일 이름변경/삭제, 웹(Network 탭)의
   계정(ID/PW)으로 웹 UI 를 보호.
 
