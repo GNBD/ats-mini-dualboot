@@ -6,75 +6,135 @@
 <title>ATS Mini Boot Manager — Web Installer</title>
 <style>
   :root{
-    --bg:#f8fafc;--fg:#0f172a;--mut:#64748b;--card:#ffffff;--line:#e2e8f0;--chip:#f1f5f9;
-    --acc:#2563eb;--accfg:#ffffff;--ok:#16a34a;--warn:#d97706;--code:#f1f5f9;
-    --shadow:0 1px 2px rgba(15,23,42,.06),0 1px 3px rgba(15,23,42,.10);
+    --bg:#ffffff; --fg:#0a0a0a; --mut:#737373; --card:#ffffff; --line:#e5e5e5;
+    --chip:#f5f5f5; --accent:#111111; --accent-fg:#ffffff;
+    --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.06);
+    --glow:0 0 0 rgba(0,0,0,0);
   }
   html[data-theme="dark"]{
-    --bg:#0f172a;--fg:#e2e8f0;--mut:#94a3b8;--card:#1e293b;--line:#334155;--chip:#0b1220;
-    --acc:#3b82f6;--accfg:#ffffff;--ok:#22c55e;--warn:#f59e0b;--code:#0b1220;
-    --shadow:0 1px 2px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.45);
+    --bg:#000000; --fg:#fafafa; --mut:#a3a3a3; --card:#0a0a0a; --line:#262626;
+    --chip:#141414; --accent:#ffffff; --accent-fg:#000000;
+    --shadow:0 1px 2px rgba(255,255,255,.04),0 8px 30px rgba(255,255,255,.05);
   }
   *{box-sizing:border-box}
+  html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);
     font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    line-height:1.55;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:720px;margin:0 auto;padding:28px 18px 72px}
-  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:20px}
-  h1{font-size:20px;margin:0;letter-spacing:-.01em}
-  .sub{color:var(--mut);font-size:13px;margin:4px 0 0}
+    line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  /* animated monochrome background */
+  .bgfx{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;
+    background:
+      radial-gradient(60% 50% at 15% 10%, var(--chip), transparent 60%),
+      radial-gradient(50% 60% at 90% 90%, var(--chip), transparent 60%);
+    animation:drift 18s ease-in-out infinite alternate}
+  @keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(0,-14px,0) scale(1.04)}}
+  .wrap{position:relative;z-index:1;max-width:760px;margin:0 auto;padding:26px 18px 80px}
+
+  header{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:22px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:40px;height:40px;border-radius:12px;border:1.5px solid var(--fg);display:grid;place-items:center;
+    font-size:18px;font-weight:800;letter-spacing:-1px;animation:spin3 8s linear infinite}
+  @keyframes spin3{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+  h1{font-size:19px;margin:0;letter-spacing:-.02em}
+  .sub{color:var(--mut);font-size:12.5px;margin:2px 0 0}
   .top{display:flex;gap:8px;align-items:center}
-  .langs{display:flex;gap:4px;background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:3px}
-  .langs button{background:none;color:var(--mut);border:0;border-radius:7px;padding:6px 10px;font-size:13px;cursor:pointer}
-  .langs button.on{background:var(--card);color:var(--fg);box-shadow:var(--shadow)}
-  .iconbtn{background:var(--card);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;
-    font-size:16px;cursor:pointer;color:var(--fg)}
-  .steps{display:flex;gap:6px;margin:0 0 18px;flex-wrap:wrap}
-  .st{flex:1;min-width:66px;text-align:center;font-size:11.5px;color:var(--mut);
-    border:1px solid var(--line);border-radius:10px;padding:7px 4px;background:var(--card)}
-  .st b{display:block;font-size:13px}
-  .st.on{color:var(--accfg);border-color:var(--acc);background:var(--acc)}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin:14px 0;box-shadow:var(--shadow)}
-  h2{font-size:16px;margin:0 0 4px;letter-spacing:-.01em}
-  h3{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin:18px 0 8px}
+  .langs{display:flex;gap:3px;background:var(--chip);border:1px solid var(--line);border-radius:11px;padding:3px}
+  .langs button{background:none;color:var(--mut);border:0;border-radius:8px;padding:6px 10px;font-size:12.5px;cursor:pointer;transition:.2s}
+  .langs button.on{background:var(--accent);color:var(--accent-fg)}
+  .iconbtn{background:var(--card);border:1px solid var(--line);border-radius:11px;width:38px;height:38px;
+    font-size:16px;cursor:pointer;color:var(--fg);transition:.2s}
+  .iconbtn:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+
+  /* progress rail */
+  .rail{display:flex;align-items:flex-start;justify-content:space-between;position:relative;margin:8px 4px 26px}
+  .rail::before{content:"";position:absolute;left:10px;right:10px;top:15px;height:2px;background:var(--line)}
+  .prog{position:absolute;left:10px;top:15px;height:2px;background:var(--accent);width:0;transition:width .5s cubic-bezier(.2,.7,.2,1)}
+  .node{position:relative;z-index:1;flex:1;text-align:center;color:var(--mut);font-size:11.5px}
+  .node .dot{display:grid;place-items:center;width:32px;height:32px;margin:0 auto 6px;border-radius:50%;
+    background:var(--card);border:2px solid var(--line);font-weight:700;font-size:13px;transition:.35s}
+  .node.on{color:var(--fg)}
+  .node.on .dot{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);
+    transform:scale(1.08);box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 14%,transparent)}
+  .node.done .dot{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+  .node.done .dot::after{content:"✓"}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;
+    box-shadow:var(--shadow);animation:fadeUp .5s cubic-bezier(.2,.7,.2,1) both}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  h2{font-size:17px;margin:0 0 4px;letter-spacing:-.02em}
+  h3{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);margin:20px 0 8px}
   p,li{font-size:14px}
   .note{color:var(--mut);font-size:13px;margin:4px 0}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;
-    border:1px solid transparent;border-radius:10px;background:var(--acc);color:var(--accfg);
-    font-size:14.5px;font-weight:600;cursor:pointer}
-  .btn:hover{filter:brightness(1.06)}.btn:disabled{opacity:.5;cursor:default}
-  .btn.ok{background:var(--ok)}.btn.ghost{background:transparent;color:var(--fg);border-color:var(--line)}
-  .btn.sm{padding:8px 14px;font-size:13px}
+  .step{display:none}
+  .step.on{display:block}
+
+  .hero{text-align:center;padding:10px 0 6px}
+  .hero .big{font-size:26px;font-weight:800;letter-spacing:-.03em;margin:0 0 6px}
+  .connect{width:120px;height:120px;margin:16px auto;border-radius:50%;border:2px dashed var(--line);
+    display:grid;place-items:center;background:var(--chip);transition:.3s}
+  .connect.ok{border-style:solid;border-color:var(--fg);animation:pop .4s}
+  .connect.busy{animation:pulse 1.2s ease-in-out infinite}
+  @keyframes pop{0%{transform:scale(.9)}60%{transform:scale(1.06)}100%{transform:scale(1)}}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--fg) 20%,transparent)}50%{box-shadow:0 0 0 14px transparent}}
+  .connect .glyph{font-size:34px}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border:1.5px solid var(--accent);
+    border-radius:12px;background:var(--accent);color:var(--accent-fg);font-size:14.5px;font-weight:700;cursor:pointer;
+    transition:transform .15s ease,box-shadow .2s,opacity .2s}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 10px 24px color-mix(in srgb,var(--accent) 18%,transparent)}
+  .btn:active{transform:translateY(0)}
+  .btn:disabled{opacity:.4;cursor:default;transform:none;box-shadow:none}
+  .btn.ghost{background:transparent;color:var(--fg);border-color:var(--line)}
+  .btn.ghost:hover{box-shadow:none;border-color:var(--fg)}
+  .btn.sm{padding:9px 15px;font-size:13px}
+  .btn.wide{width:100%}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0}
   .row.right{justify-content:flex-end}
+
   input[type=file],input[type=text],select{background:var(--bg);color:var(--fg);
-    border:1px solid var(--line);border-radius:10px;padding:10px;width:100%;margin:6px 0;font-size:14px}
-  input:focus,select:focus{outline:2px solid var(--acc);outline-offset:0;border-color:var(--acc)}
-  .chk{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;margin:10px 0;cursor:pointer}
-  .chk input{width:auto;margin:3px 0 0}
-  .bar{height:8px;background:var(--chip);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:14px 0 8px}
-  .fill{height:100%;width:0%;background:var(--acc);transition:width .15s}
+    border:1.5px solid var(--line);border-radius:12px;padding:11px;width:100%;margin:7px 0;font-size:14px;transition:.2s}
+  input:focus,select:focus{outline:none;border-color:var(--fg);box-shadow:0 0 0 3px color-mix(in srgb,var(--fg) 12%,transparent)}
+  .chk{display:flex;gap:11px;align-items:flex-start;font-size:13.5px;margin:11px 0;cursor:pointer;transition:.2s}
+  .chk input{width:auto;margin:3px 0 0;accent-color:var(--accent)}
+
+  .bar{height:9px;background:var(--chip);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:16px 0 8px}
+  .fill{height:100%;width:0%;border-radius:999px;background:var(--accent);position:relative;transition:width .2s}
+  .fill::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,
+    color-mix(in srgb,var(--accent-fg) 22%,transparent) 0 8px,transparent 8px 16px);animation:shim 1s linear infinite}
+  @keyframes shim{from{background-position:0 0}to{background-position:32px 0}}
   #status{font-size:13px;color:var(--mut);min-height:1.4em}
-  #log{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:12px;
-    height:190px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;
-    white-space:pre-wrap;color:var(--mut);margin:0}
-  #licbox{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:12px;
-    height:150px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;
-    white-space:pre-wrap;color:var(--mut);margin:0}
-  .step{display:none}.step.on{display:block}
-  a{color:var(--acc)}
-  .modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:20;
-    align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
+  .term{background:var(--chip);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .term .bar3{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+  .term .bar3 i{width:10px;height:10px;border-radius:50%;background:var(--line);display:block}
+  #log{margin:0;padding:12px;height:190px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+    font-size:12px;white-space:pre-wrap;color:var(--mut)}
+  #log::after{content:"▋";color:var(--fg);animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+  #licbox{background:var(--chip);border:1px solid var(--line);border-radius:14px;padding:12px;height:150px;
+    overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;white-space:pre-wrap;color:var(--mut);margin:0}
+  a{color:var(--fg)}
+  footer{margin-top:24px;text-align:center;color:var(--mut);font-size:12.5px;
+    border-top:1px solid var(--line);padding-top:14px}
+
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30;
+    align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+  html[data-theme="dark"] .modal{background:rgba(0,0,0,.7)}
   .modal.on{display:flex}
-  .mbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;
-    max-width:400px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,.3)}
+  .mbox{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;max-width:410px;width:100%;
+    box-shadow:0 24px 60px rgba(0,0,0,.4);animation:pop .3s cubic-bezier(.2,.7,.2,1)}
+  .spin{width:16px;height:16px;border:2px solid var(--mut);border-top-color:var(--accent);border-radius:50%;
+    display:inline-block;animation:spin3 .8s linear infinite;vertical-align:-3px}
 </style>
 <script>(function(){try{var t=localStorage.getItem("ats-theme");if(!t)t=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 </head>
 <body>
+<div class="bgfx"></div>
 <div class="wrap">
   <header>
-    <div><h1 data-i18n="title"></h1><p class="sub" data-i18n="sub"></p></div>
+    <div class="brand">
+      <div class="logo">▚</div>
+      <div><h1 data-i18n="title"></h1><p class="sub" data-i18n="sub"></p></div>
+    </div>
     <div class="top">
       <div class="langs" id="langs">
         <button data-lang="en">English</button>
@@ -85,20 +145,24 @@
     </div>
   </header>
 
-  <div class="steps">
-    <div class="st on" data-n="1"><b>1</b><span data-i18n="st1"></span></div>
-    <div class="st" data-n="2"><b>2</b><span data-i18n="st2"></span></div>
-    <div class="st" data-n="3"><b>3</b><span data-i18n="st3"></span></div>
-    <div class="st" data-n="4"><b>4</b><span data-i18n="st4"></span></div>
+  <div class="rail">
+    <div class="prog" id="prog"></div>
+    <div class="node on" data-n="1"><span class="dot">1</span><span data-i18n="st1"></span></div>
+    <div class="node" data-n="2"><span class="dot">2</span><span data-i18n="st2"></span></div>
+    <div class="node" data-n="3"><span class="dot">3</span><span data-i18n="st3"></span></div>
+    <div class="node" data-n="4"><span class="dot">4</span><span data-i18n="st4"></span></div>
   </div>
 
   <section class="step on" data-step="1">
     <div class="card">
-      <h2 data-i18n="s1_h"></h2>
-      <p class="note" data-i18n="s1_p"></p>
-      <div class="row"><button class="btn" id="select" data-i18n="select"></button></div>
-      <div id="chipinfo" class="note"></div>
-      <div class="row right"><button class="btn ok" id="next1" disabled data-i18n="next"></button></div>
+      <div class="hero">
+        <p class="big" data-i18n="s1_h"></p>
+        <p class="note" data-i18n="s1_p"></p>
+        <div class="connect" id="conn"><span class="glyph">⌁</span></div>
+        <button class="btn" id="select" data-i18n="select"></button>
+      </div>
+      <div id="chipinfo" class="note" style="text-align:center"></div>
+      <div class="row right"><button class="btn ghost" id="next1" disabled data-i18n="next"></button></div>
     </div>
   </section>
 
@@ -107,7 +171,7 @@
       <h2 data-i18n="s2_h"></h2>
       <p class="note" data-i18n="s2_p"></p>
       <div class="row">
-        <button class="btn ok" id="yes2" data-i18n="yes"></button>
+        <button class="btn" id="yes2" data-i18n="yes"></button>
         <button class="btn ghost" id="no2" data-i18n="no"></button>
       </div>
       <div id="fwbox" style="display:none">
@@ -119,7 +183,7 @@
       </div>
       <div class="row right">
         <button class="btn ghost" id="back2" data-i18n="back"></button>
-        <button class="btn ok" id="next2" data-i18n="next"></button>
+        <button class="btn" id="next2" data-i18n="next"></button>
       </div>
     </div>
   </section>
@@ -140,7 +204,7 @@
       <label class="chk"><input type="checkbox" id="ag2"><span data-i18n="agree2"></span></label>
       <div class="row right">
         <button class="btn ghost" id="back3" data-i18n="back"></button>
-        <button class="btn ok" id="next3" disabled data-i18n="next"></button>
+        <button class="btn" id="next3" disabled data-i18n="next"></button>
       </div>
     </div>
   </section>
@@ -158,17 +222,18 @@
       <label class="chk"><input type="checkbox" id="erase"><span data-i18n="erase_chk"></span></label>
       <p class="note" data-i18n="erase_hint"></p>
       <h3 data-i18n="term_h"></h3>
-      <pre id="log"></pre>
+      <div class="term">
+        <div class="bar3"><i></i><i></i><i></i></div>
+        <pre id="log"></pre>
+      </div>
     </div>
   </section>
 
-  <footer class="note" style="text-align:center;margin-top:18px;border-top:1px solid var(--line);padding-top:12px">
-    <span data-i18n="supports"></span>
-  </footer>
+  <footer><span data-i18n="supports"></span></footer>
 </div>
 
 <div class="modal" id="modal"><div class="mbox">
-  <h3 id="m_h" style="color:var(--warn);margin-top:0"></h3>
+  <h3 id="m_h" style="color:var(--fg);margin-top:0;font-size:16px;text-transform:none;letter-spacing:-.01em"></h3>
   <p id="m_p" class="note"></p>
   <div class="row right">
     <button class="btn ghost" id="m_no" data-i18n="cf_no"></button>
@@ -181,10 +246,10 @@ import { ESPLoader, Transport } from "https://unpkg.com/esptool-js/bundle.js";
 
 const I18N = {
   en:{
-    title:"ATS Mini Boot Manager — Web Installer", sub:"Easy bootloader flasher for the ATS Mini.",
+    title:"ATS Mini Boot Manager", sub:"Web Installer",
     supports:"This flasher supports: v4.1.0 (DES)",
     st1:"Device",st2:"Firmware",st3:"Terms",st4:"Flash",
-    s1_h:"Step 1 · Device", s1_p:"Connect your ATS Mini over USB, then press Select device.",
+    s1_h:"Easy Bootloader Flasher", s1_p:"Connect your ATS Mini over USB.",
     select:"Select device", next:"Next", back:"Back", chip:"Chip",
     s2_h:"Step 2 · Firmware (optional)", s2_p:"Pre-install an app firmware (OTA .bin) now?",
     yes:"Yes, choose firmware", no:"No, skip", slot:"Slot", urlph:"…or paste a direct .bin URL",
@@ -195,7 +260,7 @@ const I18N = {
     warn_3:"Do not unplug USB or cut power while flashing.",
     lic_h:"License", agree1:"I have read and agree to the license and terms.",
     agree2:"I understand the risks and that my device data may be erased.",
-    s4_h:"Step 4 · Flash", s4_p:"Press Flash!. The terminal below shows progress.",
+    s4_h:"Step 4 · Flash", s4_p:"Press Flash!. The terminal shows progress.",
     erase_chk:"Erase all flash (NAND erase) before writing", erase_hint:"Erases the whole chip, including settings and apps.",
     flash:"Flash!", term_h:"Terminal",
     cf_yes:"Continue", cf_no:"Cancel", cf_p:"Write to the connected board now?",
@@ -207,10 +272,10 @@ const I18N = {
     lic_fail:"Could not load the license text. See github.com/GNBD/ats-mini-dualboot"
   },
   ru:{
-    title:"ATS Mini Boot Manager — веб-установщик", sub:"Простая прошивка загрузчика для ATS Mini.",
+    title:"ATS Mini Boot Manager", sub:"Веб-установщик",
     supports:"Этот установщик поддерживает: v4.1.0 (DES)",
     st1:"Устройство",st2:"Прошивка",st3:"Условия",st4:"Прошивка",
-    s1_h:"Шаг 1 · Устройство", s1_p:"Подключите ATS Mini по USB и нажмите «Выбрать устройство».",
+    s1_h:"Простой прошивальщик загрузчика", s1_p:"Подключите ATS Mini по USB.",
     select:"Выбрать устройство", next:"Далее", back:"Назад", chip:"Чип",
     s2_h:"Шаг 2 · Прошивка (необязательно)", s2_p:"Установить прошивку приложения (OTA .bin) сразу?",
     yes:"Да, выбрать файл", no:"Нет, пропустить", slot:"Слот", urlph:"…или вставьте прямую ссылку на .bin",
@@ -220,8 +285,8 @@ const I18N = {
     warn_2:"Только платы 16 МБ (N16R8). Сначала сделайте резервную копию.",
     warn_3:"Не отключайте USB и не обесточивайте во время прошивки.",
     lic_h:"Лицензия", agree1:"Я прочитал и принимаю лицензию и условия.",
-    agree2:"Я понимаю риски и что данные устройства могут быть стёрты.",
-    s4_h:"Шаг 4 · Прошивка", s4_p:"Нажмите «Прошить». В терминале ниже виден прогресс.",
+    agree2:"Я понимаю риски и что данные могут быть стёрты.",
+    s4_h:"Шаг 4 · Прошивка", s4_p:"Нажмите «Прошить». В терминале виден прогресс.",
     erase_chk:"Стереть всю flash (NAND erase) перед записью", erase_hint:"Стирает весь чип, включая настройки и приложения.",
     flash:"Прошить!", term_h:"Терминал",
     cf_yes:"Продолжить", cf_no:"Отмена", cf_p:"Записать в подключённую плату сейчас?",
@@ -233,10 +298,10 @@ const I18N = {
     lic_fail:"Не удалось загрузить текст лицензии. См. github.com/GNBD/ats-mini-dualboot"
   },
   ko:{
-    title:"ATS Mini Boot Manager — 웹 설치기", sub:"ATS Mini용 간편 부트로더 플래셔.",
+    title:"ATS Mini Boot Manager", sub:"웹 설치기",
     supports:"이 플래셔 지원 버전: v4.1.0 (DES)",
     st1:"장치",st2:"펌웨어",st3:"약관",st4:"플래시",
-    s1_h:"1단계 · 장치", s1_p:"ATS Mini를 USB로 연결한 뒤 ‘장치 선택’을 누르세요.",
+    s1_h:"이지 부트로더 플래셔", s1_p:"ATS Mini를 USB로 연결하세요.",
     select:"장치 선택", next:"다음", back:"뒤로", chip:"칩",
     s2_h:"2단계 · 펌웨어 (선택)", s2_p:"앱 펌웨어(OTA .bin)를 미리 설치할까요?",
     yes:"예, 파일 고르기", no:"아니오, 건너뛰기", slot:"슬롯", urlph:"…또는 .bin 직접 링크 붙여넣기",
@@ -261,6 +326,7 @@ const I18N = {
 };
 let lang="en";
 const T=k=>(I18N[lang]&&I18N[lang][k])||I18N.en[k]||k;
+const $=id=>document.getElementById(id);
 function setLang(l){
   if(!I18N[l]) l="en"; lang=l; document.documentElement.lang=l;
   document.querySelectorAll("[data-i18n]").forEach(el=>{const v=I18N[l][el.getAttribute("data-i18n")];if(v!==undefined)el.textContent=v;});
@@ -270,27 +336,29 @@ function setLang(l){
 }
 document.querySelectorAll("#langs button").forEach(b=>b.addEventListener("click",()=>setLang(b.dataset.lang)));
 
-const $=id=>document.getElementById(id);
 const logEl=$("log"), st=$("status"), fill=$("fill");
+const log=s=>{logEl.textContent+=s+"\n";logEl.scrollTop=logEl.scrollHeight;};
+const bar=p=>{fill.style.width=Math.max(0,Math.min(100,p))+"%";};
+const status=s=>{st.textContent=s;};
+
 function applyTheme(t){
   document.documentElement.setAttribute("data-theme",t);
   const b=$("theme"); if(b) b.textContent=(t==="dark")?"☀":"☾";
   try{localStorage.setItem("ats-theme",t);}catch(e){}
 }
-(function(){
-  const t=document.documentElement.getAttribute("data-theme")||"light";
-  applyTheme(t);
-  $("theme").onclick=()=>applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
-})();
-const log=s=>{logEl.textContent+=s+"\n";logEl.scrollTop=logEl.scrollHeight;};
-const bar=p=>{fill.style.width=Math.max(0,Math.min(100,p))+"%";};
-const status=s=>{st.textContent=s;};
+$("theme").onclick=()=>applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
+applyTheme(document.documentElement.getAttribute("data-theme")||"light");
 
 function show(n){
   document.querySelectorAll(".step").forEach(s=>s.classList.toggle("on",+s.dataset.step===n));
-  document.querySelectorAll(".st").forEach(s=>s.classList.toggle("on",+s.dataset.n===n));
+  document.querySelectorAll(".node").forEach(nd=>{
+    const k=+nd.dataset.n;
+    nd.classList.toggle("on",k===n); nd.classList.toggle("done",k<n);
+    nd.querySelector(".dot").textContent = k<n ? "" : String(k);
+  });
+  $("prog").style.width=((n-1)/3*100)+"%";
   if(n===3) loadLicense();
-  window.scrollTo(0,0);
+  window.scrollTo({top:0,behavior:"smooth"});
 }
 
 const NEED=[
@@ -303,12 +371,14 @@ let transport=null, loader=null, busy=false, useApp=false, licLoaded=false;
 async function connect(){
   if(loader) return loader;
   if(!navigator.serial) throw new Error(T("notserial"));
-  status(T("connecting"));
+  status(T("connecting")); $("conn").classList.add("busy");
   const port=await navigator.serial.requestPort();
   transport=new Transport(port,true);
   loader=new ESPLoader({transport,baudrate:460800,
     terminal:{clean(){logEl.textContent="";},writeLine(d){log(d);},write(d){logEl.textContent+=d;}}});
   const chip=await loader.main();
+  $("conn").classList.remove("busy"); $("conn").classList.add("ok");
+  $("conn").querySelector(".glyph").textContent="✓";
   log(T("chip")+": "+chip);
   $("chipinfo").textContent=chip;
   return loader;
@@ -330,24 +400,18 @@ async function loadLicense(){
   box.textContent=T("lic_fail");
 }
 
-async function getRecoveryFiles(eraseAll){
-  const out=[];
-  for(const n of NEED){
-    const r=await fetch(n.local); if(!r.ok) throw new Error("missing "+n.local);
-    const data=new Uint8Array(await r.arrayBuffer());
-    out.push({data, address:n.addr});
-    log(n.name+"  "+data.length+" B  @ 0x"+n.addr.toString(16));
-  }
-  return out;
-}
-
 async function runFlash(){
   busy=true; $("flash").disabled=true;
   try{
     await connect();
     status(T("fetching"));
-    const fa=await getRecoveryFiles();
-
+    const fa=[];
+    for(const n of NEED){
+      const r=await fetch(n.local); if(!r.ok) throw new Error("missing "+n.local);
+      const data=new Uint8Array(await r.arrayBuffer());
+      fa.push({data, address:n.addr});
+      log(n.name+"  "+data.length+" B  @ 0x"+n.addr.toString(16));
+    }
     if(useApp){
       const url=$("appurl").value.trim(), file=$("appfile").files[0];
       if(url||file){
@@ -360,7 +424,6 @@ async function runFlash(){
         log("app "+name+"  "+data.length+" B  @ 0x"+addr.toString(16));
       }
     }
-
     const total=fa.reduce((s,f)=>s+f.data.length,0);
     let acc=0; const base=[]; for(const f of fa){ base.push(acc); acc+=f.data.length; }
     status(T("writing"));
@@ -376,24 +439,18 @@ async function runFlash(){
 }
 
 function confirmThen(){
-  $("m_h").textContent=$("erase").checked?"⚠ "+T("flash"):T("flash");
-  $("m_p").textContent=$("erase").checked?T("cf_erase"):T("cf_p");
+  $("m_h").textContent = $("erase").checked ? "⚠ "+T("flash") : T("flash");
+  $("m_p").textContent = $("erase").checked ? T("cf_erase") : T("cf_p");
   $("modal").classList.add("on");
 }
 function closeModal(){ $("modal").classList.remove("on"); }
 
-$("select").onclick=async()=>{
-  try{ await connect(); $("next1").disabled=false; }
-  catch(e){ status(T("err")+": "+e.message); }
-};
+$("select").onclick=async()=>{ try{ await connect(); $("next1").disabled=false; } catch(e){ status(T("err")+": "+e.message); } };
 $("next1").onclick=()=>show(2);
 $("back2").onclick=()=>show(1);
 $("yes2").onclick=()=>{ useApp=true; $("fwbox").style.display="block"; };
 $("no2").onclick=()=>{ useApp=false; $("fwbox").style.display="none"; show(3); };
-$("next2").onclick=()=>{
-  if(useApp && !$("appurl").value.trim() && !$("appfile").files[0]){ status(T("pickfile")); return; }
-  show(3);
-};
+$("next2").onclick=()=>{ if(useApp && !$("appurl").value.trim() && !$("appfile").files[0]){ status(T("pickfile")); return; } show(3); };
 $("back3").onclick=()=>show(2);
 const chk=()=>{ $("next3").disabled=!($("ag1").checked && $("ag2").checked); };
 $("ag1").onchange=chk; $("ag2").onchange=chk;
@@ -407,7 +464,7 @@ $("m_yes").onclick=()=>{ closeModal(); runFlash(); };
   let l=null; try{l=localStorage.getItem("ats-inst-lang");}catch(e){}
   if(!l){ const n=(navigator.language||"en").slice(0,2).toLowerCase();
     l=(n==="ru")?"ru":(n==="ko")?"ko":"en"; }
-  setLang(l);
+  setLang(l); show(1);
   if(!navigator.serial){ status(T("notserial")); $("select").disabled=true; }
 })();
 </script>
