@@ -16,5 +16,9 @@ Boot manager firmware for the ATS Mini ESP32-S3/SI4732 receiver.
   See `pyproject.toml` for categories.
 - Update documentation when user-facing behavior changes. Stay brief, use the
   existing writing style.
+- The theme boot manager is in `ats-mini-recovery-theme/`; its web docs live in
+  `docs/` and are published with GitHub Pages (`/docs`). On a new release,
+  refresh the one-click flasher by replacing `docs/firmware/` files and editing
+  `docs/firmware/manifest.json` (version + names); no script changes needed.
 - Do not compile anything unless asked.
 - Report validation performed and any behavior needing hardware testing.

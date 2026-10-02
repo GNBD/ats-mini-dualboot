@@ -271,7 +271,7 @@
     </div>
   </section>
 
-  <footer><span data-i18n="supports"></span><br>by GNBD · <a href="https://github.com/GNBD/ats-mini-dualboot" target="_blank" rel="noopener">github.com/GNBD/ats-mini-dualboot</a></footer>
+  <footer><span data-i18n="supports"></span> <b id="fver">v4.1.0 (DES)</b><br>by GNBD · <a href="https://github.com/GNBD/ats-mini-dualboot" target="_blank" rel="noopener">github.com/GNBD/ats-mini-dualboot</a></footer>
 </div>
 
 <div class="modal" id="modal"><div class="mbox">
@@ -289,7 +289,7 @@ import { ESPLoader, Transport } from "https://unpkg.com/esptool-js/bundle.js";
 const I18N = {
   en:{
     title:"Boot Manager Flasher", sub:"Web flasher · by GNBD",
-    supports:"This flasher supports: v4.1.0 (DES)",
+    supports:"This flasher supports:",
     st1:"Device",st2:"Firmware",st3:"Terms",st4:"Flash",
     s1_h:"Boot Manager Flasher", s1_p:"Connect your ATS Mini over USB.",
     select:"Select device", next:"Next", back:"Back", chip:"Chip",
@@ -315,7 +315,7 @@ const I18N = {
   },
   ru:{
     title:"Прошивальщик загрузчика", sub:"Веб-прошивальщик · от GNBD",
-    supports:"Этот установщик поддерживает: v4.1.0 (DES)",
+    supports:"Этот установщик поддерживает:",
     st1:"Устройство",st2:"Прошивка",st3:"Условия",st4:"Прошивка",
     s1_h:"Прошивальщик загрузчика", s1_p:"Подключите ATS Mini по USB.",
     select:"Выбрать устройство", next:"Далее", back:"Назад", chip:"Чип",
@@ -341,7 +341,7 @@ const I18N = {
   },
   ko:{
     title:"부트매니저 플래셔", sub:"웹 플래셔 · by GNBD",
-    supports:"이 플래셔 지원 버전: v4.1.0 (DES)",
+    supports:"이 플래셔 지원 버전:",
     st1:"장치",st2:"펌웨어",st3:"약관",st4:"플래시",
     s1_h:"부트매니저 플래셔", s1_p:"ATS Mini를 USB로 연결하세요.",
     select:"장치 선택", next:"다음", back:"뒤로", chip:"칩",
@@ -403,11 +403,25 @@ function show(n){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
-const NEED=[
+let NEED=[
   {name:"ats-mini-bootloader-v4.bin", local:"firmware/ats-mini-bootloader-v4.bin", addr:0x0},
   {name:"ats-mini-partitions-v4.bin", local:"firmware/ats-mini-partitions-v4.bin", addr:0x8000},
   {name:"ats-mini-recovery-4.1.0.bin", local:"firmware/ats-mini-recovery-4.1.0.bin", addr:0x860000},
 ];
+
+// firmware/manifest.json lists the files to flash; updating a release means
+// replacing those files and editing the manifest, not this script.
+async function loadManifest(){
+  try{
+    const r=await fetch("firmware/manifest.json",{cache:"no-store"});
+    if(!r.ok) return;
+    const m=await r.json();
+    if(m.version) $("fver").textContent=m.version;
+    if(Array.isArray(m.files) && m.files.length){
+      NEED=m.files.map(f=>({name:f.name, local:"firmware/"+f.name, addr:Number(f.offset)||0}));
+    }
+  }catch(e){}
+}
 
 // A merged (full) image carries a partition table at 0x8000; extract just the
 // first app image from it so it can go into a slot, exactly like the firmware.
@@ -560,7 +574,7 @@ $("m_yes").onclick=()=>{ closeModal(); runFlash(); };
   let l=null; try{l=localStorage.getItem("ats-inst-lang");}catch(e){}
   if(!l){ const n=(navigator.language||"en").slice(0,2).toLowerCase();
     l=(n==="ru")?"ru":(n==="ko")?"ko":"en"; }
-  setLang(l); show(1);
+  setLang(l); show(1); loadManifest();
   if(!navigator.serial){ status(T("notserial")); $("select").disabled=true; }
 })();
 </script>
