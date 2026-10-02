@@ -6,39 +6,53 @@
 <title>ATS Mini Boot Manager — Web Installer</title>
 <style>
   :root{--bg:#0e1116;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;
-    --acc:#1f6feb;--ok:#3fb950;--warn:#d29922;--del:#da3633;--code:#0d1117}
+    --acc:#1f6feb;--ok:#238636;--warn:#d29922;--del:#da3633;--code:#0d1117}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);
     font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6}
-  .wrap{max-width:720px;margin:0 auto;padding:24px 18px 64px}
+  .wrap{max-width:720px;margin:0 auto;padding:22px 18px 64px}
   header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
-    border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:20px}
-  h1{font-size:20px;margin:0}
-  .sub{color:var(--mut);font-size:13.5px;margin:4px 0 0}
+    border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:16px}
+  h1{font-size:19px;margin:0}.sub{color:var(--mut);font-size:13px;margin:4px 0 0}
   .langs{display:flex;gap:6px}
   .langs button{background:var(--card);color:var(--mut);border:1px solid var(--line);
     border-radius:8px;padding:6px 11px;font-size:13px;cursor:pointer}
   .langs button.on{background:var(--acc);border-color:var(--acc);color:#fff}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
-  .card h2{font-size:12px;margin:0 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
-  .card.warn{border-color:var(--warn)}
-  .card.warn p{margin:0;color:var(--warn);font-size:13.5px}
-  .btn{display:inline-block;padding:11px 18px;border:0;border-radius:10px;background:var(--acc);color:#fff;
-    font-size:15px;cursor:pointer}
-  .btn:hover{filter:brightness(1.1)}
-  .btn:disabled{opacity:.5;cursor:default}
-  .btn.ok{background:#238636}.btn.sm{padding:8px 14px;font-size:13.5px}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
-  input[type=file],input[type=text]{background:var(--code);color:var(--fg);border:1px solid var(--line);
-    border-radius:8px;padding:8px;width:100%;margin:6px 0}
-  .bar{height:10px;background:#21262d;border-radius:6px;overflow:hidden;margin:14px 0 6px}
+  .steps{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
+  .st{flex:1;min-width:70px;text-align:center;font-size:12px;color:var(--mut);
+    border:1px solid var(--line);border-radius:8px;padding:6px 4px}
+  .st.on{color:#fff;border-color:var(--acc);background:var(--acc)}
+  .st b{display:block;font-size:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
+  h2{font-size:16px;margin:0 0 8px}
+  h3{font-size:14px;margin:16px 0 6px;color:var(--mut)}
+  p,li{font-size:14px}
+  .note{color:var(--mut);font-size:13px}
+  .btn{display:inline-block;padding:11px 18px;border:0;border-radius:10px;background:var(--acc);
+    color:#fff;font-size:15px;cursor:pointer}
+  .btn:hover{filter:brightness(1.1)}.btn:disabled{opacity:.45;cursor:default}
+  .btn.ok{background:var(--ok)}.btn.ghost{background:#30363d}.btn.sm{padding:8px 14px;font-size:13.5px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
+  .row.right{justify-content:flex-end}
+  input[type=file],input[type=text],select{background:var(--code);color:var(--fg);
+    border:1px solid var(--line);border-radius:8px;padding:8px;width:100%;margin:6px 0}
+  .chk{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;margin:8px 0;cursor:pointer}
+  .chk input{margin-top:3px}
+  .bar{height:10px;background:#21262d;border-radius:6px;overflow:hidden;margin:12px 0 6px}
   .fill{height:100%;width:0%;background:var(--acc);transition:width .15s}
-  #status{font-size:13.5px;color:var(--mut)}
+  #status{font-size:13px;color:var(--mut);min-height:1.4em}
   #log{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
-    height:170px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;
-    white-space:pre-wrap;color:var(--mut);margin-top:14px}
-  .note{color:var(--mut);font-size:12.5px}
+    height:180px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;
+    white-space:pre-wrap;color:var(--mut);margin:0}
+  #licbox{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+    height:150px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;
+    white-space:pre-wrap;color:var(--mut);margin:0}
+  .step{display:none}.step.on{display:block}
   a{color:#58a6ff}
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:20;
+    align-items:center;justify-content:center;padding:20px}
+  .modal.on{display:flex}
+  .mbox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;max-width:400px;width:100%}
   @media(prefers-color-scheme:light){
     :root{--bg:#f6f8fa;--card:#fff;--line:#d0d7de;--fg:#1f2328;--mut:#57606a;--code:#f0f3f6}
     a{color:#0969da}
@@ -48,10 +62,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div>
-      <h1 data-i18n="title"></h1>
-      <p class="sub" data-i18n="sub"></p>
-    </div>
+    <div><h1 data-i18n="title"></h1><p class="sub" data-i18n="sub"></p></div>
     <div class="langs" id="langs">
       <button data-lang="en">English</button>
       <button data-lang="ru">Русский</button>
@@ -59,110 +70,210 @@
     </div>
   </header>
 
-  <div class="card warn"><p data-i18n="warn"></p></div>
-
-  <div class="card">
-    <h2 data-i18n="h_boot"></h2>
-    <p class="note" data-i18n="p_boot"></p>
-    <div class="row"><button class="btn" id="install" data-i18n="install"></button></div>
-    <p class="note" id="relinfo"></p>
-    <p class="note"><a href="https://github.com/GNBD/ats-mini-dualboot/releases" target="_blank" rel="noopener" data-i18n="rel_link"></a></p>
+  <div class="steps">
+    <div class="st on" data-n="1"><b>1</b><span data-i18n="st1"></span></div>
+    <div class="st" data-n="2"><b>2</b><span data-i18n="st2"></span></div>
+    <div class="st" data-n="3"><b>3</b><span data-i18n="st3"></span></div>
+    <div class="st" data-n="4"><b>4</b><span data-i18n="st4"></span></div>
   </div>
 
-  <div class="card">
-    <h2 data-i18n="h_app"></h2>
-    <p class="note" data-i18n="p_app"></p>
-    <input type="file" id="appfile" accept=".bin">
-    <input type="text" id="appurl" data-i18n-ph="">
-    <div class="row">
-      <button class="btn sm" id="app0" data-i18n="app0"></button>
-      <button class="btn sm" id="app1" data-i18n="app1"></button>
+  <section class="step on" data-step="1">
+    <div class="card">
+      <h2 data-i18n="s1_h"></h2>
+      <p class="note" data-i18n="s1_p"></p>
+      <div class="row"><button class="btn" id="select" data-i18n="select"></button></div>
+      <div id="chipinfo" class="note"></div>
+      <div class="row right"><button class="btn ok" id="next1" disabled data-i18n="next"></button></div>
     </div>
-  </div>
+  </section>
 
-  <div class="bar"><div class="fill" id="fill"></div></div>
-  <div id="status"></div>
-  <pre id="log"></pre>
-  <p class="note" data-i18n="note"></p>
+  <section class="step" data-step="2">
+    <div class="card">
+      <h2 data-i18n="s2_h"></h2>
+      <p class="note" data-i18n="s2_p"></p>
+      <div class="row">
+        <button class="btn ok" id="yes2" data-i18n="yes"></button>
+        <button class="btn ghost" id="no2" data-i18n="no"></button>
+      </div>
+      <div id="fwbox" style="display:none">
+        <input type="file" id="appfile" accept=".bin">
+        <input type="text" id="appurl" data-i18n-ph="urlph">
+        <label class="note"><span data-i18n="slot"></span>:
+          <select id="slot"><option value="0">App0</option><option value="1">App1</option></select>
+        </label>
+      </div>
+      <div class="row right">
+        <button class="btn ghost" id="back2" data-i18n="back"></button>
+        <button class="btn ok" id="next2" data-i18n="next"></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" data-step="3">
+    <div class="card">
+      <h2 data-i18n="s3_h"></h2>
+      <p class="note" data-i18n="s3_p"></p>
+      <h3 data-i18n="warn_h"></h3>
+      <ul>
+        <li data-i18n="warn_1"></li>
+        <li data-i18n="warn_2"></li>
+        <li data-i18n="warn_3"></li>
+      </ul>
+      <h3 data-i18n="lic_h"></h3>
+      <pre id="licbox"></pre>
+      <label class="chk"><input type="checkbox" id="ag1"><span data-i18n="agree1"></span></label>
+      <label class="chk"><input type="checkbox" id="ag2"><span data-i18n="agree2"></span></label>
+      <div class="row right">
+        <button class="btn ghost" id="back3" data-i18n="back"></button>
+        <button class="btn ok" id="next3" disabled data-i18n="next"></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" data-step="4">
+    <div class="card">
+      <h2 data-i18n="s4_h"></h2>
+      <p class="note" data-i18n="s4_p"></p>
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <div id="status"></div>
+      <div class="row">
+        <button class="btn ghost" id="back4" data-i18n="back"></button>
+        <button class="btn" id="flash" data-i18n="flash"></button>
+      </div>
+      <label class="chk"><input type="checkbox" id="erase"><span data-i18n="erase_chk"></span></label>
+      <p class="note" data-i18n="erase_hint"></p>
+      <h3 data-i18n="term_h"></h3>
+      <pre id="log"></pre>
+    </div>
+  </section>
+
+  <footer class="note" style="text-align:center;margin-top:18px;border-top:1px solid var(--line);padding-top:12px">
+    <span data-i18n="supports"></span>
+  </footer>
 </div>
+
+<div class="modal" id="modal"><div class="mbox">
+  <h3 id="m_h" style="color:var(--warn);margin-top:0"></h3>
+  <p id="m_p" class="note"></p>
+  <div class="row right">
+    <button class="btn ghost" id="m_no" data-i18n="cf_no"></button>
+    <button class="btn" id="m_yes" data-i18n="cf_yes"></button>
+  </div>
+</div></div>
 
 <script type="module">
 import { ESPLoader, Transport } from "https://unpkg.com/esptool-js/bundle.js";
 
 const I18N = {
   en:{
-    title:"ATS Mini Boot Manager — Web Installer", sub:"Flash the boot manager (recovery) and app firmware from the browser. Desktop Chrome or Edge.",
-    warn:"Beta software. Back up your flash first. Do not unplug USB during flashing.",
-    h_boot:"1. Install boot manager (recovery)",
-    p_boot:"Downloads the latest release files and writes the bootloader (0x0), partition table (0x8000) and recovery (0x860000).",
-    install:"Install boot manager", rel_link:"All releases (manual download)", h_app:"2. Flash app firmware (optional)",
-    p_app:"Pick an ESP32 application image (.bin / OTA) or paste a direct URL, then write it into a slot.",
-    urlph:"…or paste a direct .bin URL",
-    app0:"Flash to App0", app1:"Flash to App1",
-    note:"Requires Chrome or Edge on a desktop and a secure page (https or localhost).",
-    connecting:"Connecting…", chip:"Chip", fetching:"Fetching files…", writing:"Flashing…",
-    resetting:"Resetting…", done:"Done.", err:"Error",
-    fromRelease:"using files from the latest release", fromLocal:"release download blocked by CORS; using bundled files",
-    nofile:"Choose an .bin file first", notserial:"Web Serial is not available in this browser."
+    title:"ATS Mini Boot Manager — Web Installer", sub:"Easy bootloader flasher. Desktop Chrome or Edge.",
+    supports:"This flasher supports: v4.1.0 (DES)",
+    st1:"Device",st2:"Firmware",st3:"Terms",st4:"Flash",
+    s1_h:"Step 1 · Device", s1_p:"Connect your ATS Mini over USB, then press Select device.",
+    select:"Select device", next:"Next", back:"Back", chip:"Chip",
+    s2_h:"Step 2 · Firmware (optional)", s2_p:"Pre-install an app firmware (OTA .bin) now?",
+    yes:"Yes, choose firmware", no:"No, skip", slot:"Slot", urlph:"…or paste a direct .bin URL",
+    s3_h:"Step 3 · Terms & warnings", s3_p:"Please read carefully before continuing.",
+    warn_h:"Warnings",
+    warn_1:"Beta software — flashing can brick the device or erase data.",
+    warn_2:"16MB (N16R8) boards only. Back up your flash first.",
+    warn_3:"Do not unplug USB or cut power while flashing.",
+    lic_h:"License", agree1:"I have read and agree to the license and terms.",
+    agree2:"I understand the risks and that my device data may be erased.",
+    s4_h:"Step 4 · Flash", s4_p:"Press Flash!. The terminal below shows progress.",
+    erase_chk:"Erase all flash (NAND erase) before writing", erase_hint:"Erases the whole chip, including settings and apps.",
+    flash:"Flash!", term_h:"Terminal",
+    cf_yes:"Continue", cf_no:"Cancel", cf_p:"Write to the connected board now?",
+    cf_erase:"Erase ALL flash and write? This wipes settings and apps.",
+    connecting:"Connecting…", fetching:"Fetching files…", writing:"Flashing…",
+    done:"Done. Reset the board to start.", err:"Error",
+    notserial:"Web Serial is not available in this browser.",
+    pickfile:"Choose a firmware file, or press No to skip.",
+    lic_fail:"Could not load the license text. See github.com/GNBD/ats-mini-dualboot"
   },
   ru:{
-    title:"ATS Mini Boot Manager — веб-установщик", sub:"Прошивка загрузчика (recovery) и приложения прямо из браузера. Chrome или Edge на компьютере.",
-    warn:"Бета. Сначала сделайте резервную копию. Не отключайте USB во время прошивки.",
-    h_boot:"1. Установка загрузчика (recovery)",
-    p_boot:"Скачивает файлы последнего релиза и пишет загрузчик (0x0), таблицу разделов (0x8000) и recovery (0x860000).",
-    install:"Установить загрузчик", rel_link:"Все релизы (скачать вручную)", h_app:"2. Прошивка приложения (необязательно)",
-    p_app:"Выберите образ приложения ESP32 (.bin / OTA) или вставьте прямую ссылку и запишите его в слот.",
-    urlph:"…или вставьте прямую ссылку на .bin",
-    app0:"В App0", app1:"В App1",
-    note:"Нужен Chrome или Edge на компьютере и защищённая страница (https или localhost).",
-    connecting:"Подключение…", chip:"Чип", fetching:"Загрузка файлов…", writing:"Прошивка…",
-    resetting:"Перезагрузка…", done:"Готово.", err:"Ошибка",
-    fromRelease:"файлы из последнего релиза", fromLocal:"загрузка релиза заблокирована CORS; используются встроенные файлы",
-    nofile:"Сначала выберите файл .bin", notserial:"Web Serial недоступен в этом браузере."
+    title:"ATS Mini Boot Manager — веб-установщик", sub:"Простая прошивка загрузчика. Chrome или Edge на компьютере.",
+    supports:"Этот установщик поддерживает: v4.1.0 (DES)",
+    st1:"Устройство",st2:"Прошивка",st3:"Условия",st4:"Прошивка",
+    s1_h:"Шаг 1 · Устройство", s1_p:"Подключите ATS Mini по USB и нажмите «Выбрать устройство».",
+    select:"Выбрать устройство", next:"Далее", back:"Назад", chip:"Чип",
+    s2_h:"Шаг 2 · Прошивка (необязательно)", s2_p:"Установить прошивку приложения (OTA .bin) сразу?",
+    yes:"Да, выбрать файл", no:"Нет, пропустить", slot:"Слот", urlph:"…или вставьте прямую ссылку на .bin",
+    s3_h:"Шаг 3 · Условия и предупреждения", s3_p:"Внимательно прочитайте перед продолжением.",
+    warn_h:"Предупреждения",
+    warn_1:"Бета-версия — прошивка может вывести устройство из строя или стереть данные.",
+    warn_2:"Только платы 16 МБ (N16R8). Сначала сделайте резервную копию.",
+    warn_3:"Не отключайте USB и не обесточивайте во время прошивки.",
+    lic_h:"Лицензия", agree1:"Я прочитал и принимаю лицензию и условия.",
+    agree2:"Я понимаю риски и что данные устройства могут быть стёрты.",
+    s4_h:"Шаг 4 · Прошивка", s4_p:"Нажмите «Прошить». В терминале ниже виден прогресс.",
+    erase_chk:"Стереть всю flash (NAND erase) перед записью", erase_hint:"Стирает весь чип, включая настройки и приложения.",
+    flash:"Прошить!", term_h:"Терминал",
+    cf_yes:"Продолжить", cf_no:"Отмена", cf_p:"Записать в подключённую плату сейчас?",
+    cf_erase:"Стереть ВСЮ flash и записать? Настройки и приложения будут удалены.",
+    connecting:"Подключение…", fetching:"Загрузка файлов…", writing:"Прошивка…",
+    done:"Готово. Перезагрузите плату.", err:"Ошибка",
+    notserial:"Web Serial недоступен в этом браузере.",
+    pickfile:"Выберите файл прошивки или нажмите «Нет».",
+    lic_fail:"Не удалось загрузить текст лицензии. См. github.com/GNBD/ats-mini-dualboot"
   },
   ko:{
-    title:"ATS Mini Boot Manager — 웹 설치기", sub:"브라우저에서 부트 매니저(리커버리)와 앱 펌웨어를 바로 플래시합니다. 데스크톱 Chrome/Edge.",
-    warn:"베타 소프트웨어입니다. 먼저 백업하세요. 플래시 중에는 USB를 뽑지 마세요.",
-    h_boot:"1. 부트 매니저(리커버리) 설치",
-    p_boot:"최신 릴리즈 파일을 받아 부트로더(0x0), 파티션 테이블(0x8000), 리커버리(0x860000)를 씁니다.",
-    install:"부트 매니저 설치", rel_link:"전체 릴리즈(수동 다운로드)", h_app:"2. 앱 펌웨어 플래시 (선택)",
-    p_app:"ESP32 앱 이미지(.bin / OTA)를 고르거나 직접 링크를 붙여 슬롯에 씁니다.",
-    urlph:"…또는 .bin 직접 링크 붙여넣기",
-    app0:"App0에 굽기", app1:"App1에 굽기",
-    note:"데스크톱 Chrome/Edge 와 보안 페이지(https 또는 localhost)가 필요합니다.",
-    connecting:"연결 중…", chip:"칩", fetching:"파일 받는 중…", writing:"플래시 중…",
-    resetting:"리셋 중…", done:"완료.", err:"오류",
-    fromRelease:"최신 릴리즈 파일 사용", fromLocal:"릴리즈 다운로드가 CORS로 막혀 내장 파일 사용",
-    nofile:"먼저 .bin 파일을 선택하세요", notserial:"이 브라우저에서는 Web Serial을 쓸 수 없습니다."
+    title:"ATS Mini Boot Manager — 웹 설치기", sub:"이지 부트로더 플래셔. 데스크톱 Chrome/Edge.",
+    supports:"이 플래셔 지원 버전: v4.1.0 (DES)",
+    st1:"장치",st2:"펌웨어",st3:"약관",st4:"플래시",
+    s1_h:"1단계 · 장치", s1_p:"ATS Mini를 USB로 연결한 뒤 ‘장치 선택’을 누르세요.",
+    select:"장치 선택", next:"다음", back:"뒤로", chip:"칩",
+    s2_h:"2단계 · 펌웨어 (선택)", s2_p:"앱 펌웨어(OTA .bin)를 미리 설치할까요?",
+    yes:"예, 파일 고르기", no:"아니오, 건너뛰기", slot:"슬롯", urlph:"…또는 .bin 직접 링크 붙여넣기",
+    s3_h:"3단계 · 약관 및 주의사항", s3_p:"계속하기 전에 꼭 읽어주세요.",
+    warn_h:"주의사항",
+    warn_1:"베타 소프트웨어 — 플래시가 기기를 벽돌로 만들거나 데이터를 지울 수 있습니다.",
+    warn_2:"16MB(N16R8) 기기 전용입니다. 먼저 백업하세요.",
+    warn_3:"플래시 중에는 USB를 뽑거나 전원을 끊지 마세요.",
+    lic_h:"라이선스", agree1:"라이선스와 약관을 읽고 동의합니다.",
+    agree2:"위험과 기기 데이터가 지워질 수 있음을 이해합니다.",
+    s4_h:"4단계 · 플래시", s4_p:"‘플래시!’를 누르세요. 아래 터미널에 진행상황이 표시됩니다.",
+    erase_chk:"쓰기 전에 전체 플래시 지우기 (NAND erase)", erase_hint:"칩 전체(설정·앱 포함)를 지웁니다.",
+    flash:"플래시!", term_h:"터미널",
+    cf_yes:"계속", cf_no:"취소", cf_p:"지금 연결된 기기에 쓰시겠습니까?",
+    cf_erase:"전체 플래시를 지우고 쓸까요? 설정과 앱이 모두 지워집니다.",
+    connecting:"연결 중…", fetching:"파일 받는 중…", writing:"플래시 중…",
+    done:"완료. 기기를 리셋하세요.", err:"오류",
+    notserial:"이 브라우저에서는 Web Serial을 쓸 수 없습니다.",
+    pickfile:"펌웨어 파일을 고르거나 ‘아니오’로 건너뛰세요.",
+    lic_fail:"라이선스 텍스트를 불러오지 못했습니다. github.com/GNBD/ats-mini-dualboot"
   }
 };
 let lang="en";
-function T(k){ return (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k; }
+const T=k=>(I18N[lang]&&I18N[lang][k])||I18N.en[k]||k;
 function setLang(l){
   if(!I18N[l]) l="en"; lang=l; document.documentElement.lang=l;
-  document.querySelectorAll("[data-i18n]").forEach(el=>{
-    const v=I18N[l][el.getAttribute("data-i18n")]; if(v!==undefined) el.textContent=v; });
+  document.querySelectorAll("[data-i18n]").forEach(el=>{const v=I18N[l][el.getAttribute("data-i18n")];if(v!==undefined)el.textContent=v;});
+  document.querySelectorAll("[data-i18n-ph]").forEach(el=>{const v=I18N[l][el.getAttribute("data-i18n-ph")];if(v!==undefined)el.placeholder=v;});
   document.querySelectorAll("#langs button").forEach(b=>b.classList.toggle("on",b.dataset.lang===l));
-  document.querySelectorAll("[data-i18n-ph]").forEach(el=>{
-    const v=I18N[l][el.getAttribute("data-i18n-ph")]; if(v!==undefined) el.placeholder=v; });
   try{localStorage.setItem("ats-inst-lang",l);}catch(e){}
 }
 document.querySelectorAll("#langs button").forEach(b=>b.addEventListener("click",()=>setLang(b.dataset.lang)));
 
 const $=id=>document.getElementById(id);
 const logEl=$("log"), st=$("status"), fill=$("fill");
-function log(s){ logEl.textContent += s+"\n"; logEl.scrollTop=logEl.scrollHeight; }
-function bar(p){ fill.style.width=Math.max(0,Math.min(100,p))+"%"; }
-function status(s){ st.textContent=s; }
+const log=s=>{logEl.textContent+=s+"\n";logEl.scrollTop=logEl.scrollHeight;};
+const bar=p=>{fill.style.width=Math.max(0,Math.min(100,p))+"%";};
+const status=s=>{st.textContent=s;};
 
-const REL_API="https://api.github.com/repos/GNBD/ats-mini-dualboot/releases/latest";
+function show(n){
+  document.querySelectorAll(".step").forEach(s=>s.classList.toggle("on",+s.dataset.step===n));
+  document.querySelectorAll(".st").forEach(s=>s.classList.toggle("on",+s.dataset.n===n));
+  if(n===3) loadLicense();
+  window.scrollTo(0,0);
+}
+
 const NEED=[
   {name:"ats-mini-bootloader-v4.bin", local:"firmware/ats-mini-bootloader-v4.bin", addr:0x0},
   {name:"ats-mini-partitions-v4.bin", local:"firmware/ats-mini-partitions-v4.bin", addr:0x8000},
   {name:"ats-mini-recovery-4.1.0.bin", local:"firmware/ats-mini-recovery-4.1.0.bin", addr:0x860000},
 ];
-
-let transport=null, loader=null, busy=false;
+let transport=null, loader=null, busy=false, useApp=false, licLoaded=false;
 
 async function connect(){
   if(loader) return loader;
@@ -170,35 +281,34 @@ async function connect(){
   status(T("connecting"));
   const port=await navigator.serial.requestPort();
   transport=new Transport(port,true);
-  loader=new ESPLoader({ transport, baudrate:460800,
-    terminal:{ clean(){logEl.textContent="";}, writeLine(d){log(d);}, write(d){logEl.textContent+=d;} } });
+  loader=new ESPLoader({transport,baudrate:460800,
+    terminal:{clean(){logEl.textContent="";},writeLine(d){log(d);},write(d){logEl.textContent+=d;}}});
   const chip=await loader.main();
   log(T("chip")+": "+chip);
+  $("chipinfo").textContent=chip;
   return loader;
 }
 
-function totalBytes(fa){ return fa.reduce((s,f)=>s+f.data.length,0); }
-async function flash(fileArray){
-  const total=totalBytes(fileArray);
-  let acc=0; const idxBase=[];
-  for(const f of fileArray){ idxBase.push(acc); acc+=f.data.length; }
-  await loader.writeFlash({
-    fileArray, flashMode:"keep", flashFreq:"keep", flashSize:"keep",
-    eraseAll:false, compress:true,
-    reportProgress:(i,w,t)=>{ const p=Math.round((idxBase[i]+w)/total*100); bar(p); status(T("writing")+" "+p+"%"); }
-  });
-  await loader.after("hard_reset");
-  bar(100);
+async function loadLicense(){
+  if(licLoaded) return; licLoaded=true;
+  const box=$("licbox"); box.textContent="…";
+  const srcs=[
+    ["https://raw.githubusercontent.com/GNBD/ats-mini-dualboot/main/LICENSE",
+     "https://raw.githubusercontent.com/GNBD/ats-mini-dualboot/main/NOTICE"],
+    ["licenses/LICENSE.txt","licenses/NOTICE.txt"]
+  ];
+  for(const [a,b] of srcs){
+    try{ const ra=await fetch(a), rb=await fetch(b);
+      if(ra.ok && rb.ok){ box.textContent=(await ra.text())+"\n\n================ NOTICE ================\n\n"+(await rb.text()); return; }
+    }catch(e){}
+  }
+  box.textContent=T("lic_fail");
 }
 
-// The release files are shipped next to this page (same origin): a browser
-// cannot read GitHub release assets directly because the asset CDN sends no
-// CORS header.
-async function getRecoveryFiles(){
+async function getRecoveryFiles(eraseAll){
   const out=[];
   for(const n of NEED){
-    const r=await fetch(n.local);
-    if(!r.ok) throw new Error("missing "+n.local);
+    const r=await fetch(n.local); if(!r.ok) throw new Error("missing "+n.local);
     const data=new Uint8Array(await r.arrayBuffer());
     out.push({data, address:n.addr});
     log(n.name+"  "+data.length+" B  @ 0x"+n.addr.toString(16));
@@ -206,51 +316,74 @@ async function getRecoveryFiles(){
   return out;
 }
 
-async function doInstall(){
-  if(busy) return; busy=true; $("install").disabled=true;
+async function runFlash(){
+  busy=true; $("flash").disabled=true;
   try{
     await connect();
-    status(T("fetching")); log(T("fetching"));
+    status(T("fetching"));
     const fa=await getRecoveryFiles();
-    await flash(fa);
-    status(T("done"));
-  }catch(e){ status(T("err")+": "+e.message); log("ERROR: "+e.message); }
-  finally{ busy=false; $("install").disabled=false; }
-}
 
-async function doApp(slot){
-  if(busy) return;
-  const url=$("appurl").value.trim();
-  const file=$("appfile").files[0];
-  if(!url && !file){ status(T("nofile")); return; }
-  busy=true; $("app0").disabled=true; $("app1").disabled=true;
-  try{
-    await connect();
-    let data, name;
-    if(url){
-      const r=await fetch(url); if(!r.ok) throw new Error("HTTP "+r.status);
-      data=new Uint8Array(await r.arrayBuffer()); name=url.split("/").pop()||url;
-    }else{
-      data=new Uint8Array(await file.arrayBuffer()); name=file.name;
+    if(useApp){
+      const url=$("appurl").value.trim(), file=$("appfile").files[0];
+      if(url||file){
+        let data,name;
+        if(url){ const r=await fetch(url); if(!r.ok) throw new Error("HTTP "+r.status);
+          data=new Uint8Array(await r.arrayBuffer()); name=url.split("/").pop()||url; }
+        else { data=new Uint8Array(await file.arrayBuffer()); name=file.name; }
+        const addr=($("slot").value==="1")?0x390000:0x10000;
+        fa.push({data, address:addr});
+        log("app "+name+"  "+data.length+" B  @ 0x"+addr.toString(16));
+      }
     }
-    const addr=(slot===1)?0x390000:0x10000;
-    log("app "+name+"  "+data.length+" B  @ 0x"+addr.toString(16));
-    await flash([{data,address:addr}]);
-    status(T("done"));
+
+    const total=fa.reduce((s,f)=>s+f.data.length,0);
+    let acc=0; const base=[]; for(const f of fa){ base.push(acc); acc+=f.data.length; }
+    status(T("writing"));
+    await loader.writeFlash({
+      fileArray:fa, flashMode:"keep", flashFreq:"keep", flashSize:"keep",
+      eraseAll:$("erase").checked, compress:true,
+      reportProgress:(i,w)=>{ const p=Math.round((base[i]+w)/total*100); bar(p); status(T("writing")+" "+p+"%"); }
+    });
+    await loader.after("hard_reset");
+    bar(100); status(T("done")); log(T("done"));
   }catch(e){ status(T("err")+": "+e.message); log("ERROR: "+e.message); }
-  finally{ busy=false; $("app0").disabled=false; $("app1").disabled=false; }
+  finally{ busy=false; $("flash").disabled=false; }
 }
 
-$("install").onclick=doInstall;
-$("app0").onclick=()=>doApp(0);
-$("app1").onclick=()=>doApp(1);
+function confirmThen(){
+  $("m_h").textContent=$("erase").checked?"⚠ "+T("flash"):T("flash");
+  $("m_p").textContent=$("erase").checked?T("cf_erase"):T("cf_p");
+  $("modal").classList.add("on");
+}
+function closeModal(){ $("modal").classList.remove("on"); }
+
+$("select").onclick=async()=>{
+  try{ await connect(); $("next1").disabled=false; }
+  catch(e){ status(T("err")+": "+e.message); }
+};
+$("next1").onclick=()=>show(2);
+$("back2").onclick=()=>show(1);
+$("yes2").onclick=()=>{ useApp=true; $("fwbox").style.display="block"; };
+$("no2").onclick=()=>{ useApp=false; $("fwbox").style.display="none"; show(3); };
+$("next2").onclick=()=>{
+  if(useApp && !$("appurl").value.trim() && !$("appfile").files[0]){ status(T("pickfile")); return; }
+  show(3);
+};
+$("back3").onclick=()=>show(2);
+const chk=()=>{ $("next3").disabled=!($("ag1").checked && $("ag2").checked); };
+$("ag1").onchange=chk; $("ag2").onchange=chk;
+$("next3").onclick=()=>show(4);
+$("back4").onclick=()=>show(3);
+$("flash").onclick=confirmThen;
+$("m_no").onclick=closeModal;
+$("m_yes").onclick=()=>{ closeModal(); runFlash(); };
 
 (function(){
   let l=null; try{l=localStorage.getItem("ats-inst-lang");}catch(e){}
   if(!l){ const n=(navigator.language||"en").slice(0,2).toLowerCase();
     l=(n==="ru")?"ru":(n==="ko")?"ko":"en"; }
   setLang(l);
-  if(!navigator.serial){ status(T("notserial")); }
+  if(!navigator.serial){ status(T("notserial")); $("select").disabled=true; }
 })();
 </script>
 </body>

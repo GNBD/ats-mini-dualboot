@@ -1,0 +1,316 @@
+Third-party notices for ATS Mini boot manager (dual-boot recovery)
+===================================================================
+
+This repository contains original code, modified upstream code, and
+third-party components.
+
+Unless a file or directory contains a different copyright or license notice,
+original code written for this repository is provided under the MIT License.
+Third-party components retain their original copyright and license terms.
+
+This NOTICE file is provided for attribution and license transparency. It does
+not replace the license text or copyright notices of any third-party component.
+
+IMPORTANT: Firmware binary distribution
+---------------------------------------
+
+Firmware releases from this repository contain code under several licenses.
+The application images built from ats-mini-recovery-beta and
+ats-mini-recovery-lite link GPL-3.0 covered code (Rotary, section 1), so
+those images fall under GPL-3.0 when they are distributed. The bootloader
+binaries are Apache-2.0 (section 3.1), and the Arduino-ESP32 core and the
+other linked libraries keep their own terms (sections 3, 4 and 5).
+
+Reaching a device by OTA is distribution as well: sending an application
+image over OTA carries the same obligations as a release download, and OTA
+is not a separate license.
+
+For GPL-3.0 covered images, provide the corresponding source code (this
+repository at the matching commit or tag) and the applicable license
+texts.
+
+1. Rotary encoder implementation
+--------------------------------
+
+The following files contain the Rotary encoder implementation attributed to
+Ben Buxton:
+
+- ats-mini-recovery-beta/Rotary.cpp
+- ats-mini-recovery-beta/Rotary.h
+- ats-mini-recovery-lite/Rotary.cpp
+- ats-mini-recovery-lite/Rotary.h
+
+Copyright:
+- Copyright 2011 Ben Buxton
+- Contact: bb@cactii.net
+
+License:
+- GNU General Public License version 3 (GPL-3.0)
+
+These files carry SPDX identifiers (SPDX-License-Identifier: GPL-3.0) and are
+not relicensed under the repository MIT License. The original copyright and
+license notices in these files must be retained.
+
+The complete GPL-3.0 license text is available at:
+
+- https://www.gnu.org/licenses/gpl-3.0.txt
+- LICENSES/GPL-3.0.txt
+
+Source references for these files:
+
+- https://github.com/esp32-si4732/ats-mini/blob/main/ats-mini/Rotary.cpp
+  and .../Rotary.h (the upstream ATS Mini copy of this implementation)
+- The project by Ben Buxton, https://github.com/benbuxton/arduino-rotary, is
+  no longer reachable there. The copyright and license notices carried in
+  the files above remain the applicable record for this implementation.
+
+When distributing firmware or other works containing this GPL-covered code,
+comply with the applicable GPL-3.0 requirements, including copyright notices,
+license text, source-code availability, statements of modification, and other
+applicable distribution obligations.
+
+2. Upstream projects and firmware lineage
+-----------------------------------------
+
+This repository has parts with different provenance:
+
+- The dual-boot / recovery source (boot manager sketches, partition tables,
+  flashing/build scripts) is covered by the repository MIT License. The
+  prebuilt bootloader binaries are ESP-IDF derivatives under Apache-2.0 (see
+  section 3.1), not MIT.
+- This repository began as a fork of the ATS Mini upstream project; parts of
+  the boot manager display code descend from that tree.
+
+Upstream project:
+
+- ATS Mini upstream project (MIT), Copyright (c) 2025 ESP32-SI4732 Radio:
+  https://github.com/esp32-si4732/ats-mini
+
+Display.h in this repository is inherited from that tree and keeps the
+upstream project's MIT terms and copyright.
+
+The applicable license for each copied or modified file is determined by the
+copyright and license notices in that file and by the license of the
+corresponding upstream project.
+
+Upstream attribution does not mean that this repository is an official
+release of any upstream project.
+
+3. Build platform and framework components
+------------------------------------------
+
+The firmware is built for the Espressif ESP32 platform using the Arduino-ESP32
+core.
+
+Build platform:
+
+- Arduino-ESP32 core
+  Version used by this project: 3.3.12
+  License: LGPL-2.1-or-later (upstream LICENSE.md and package.json)
+  Source:
+  https://github.com/espressif/arduino-esp32
+
+- ESP-IDF components bundled with or used by Arduino-ESP32
+  Version used by the shipped bootloaders: v5.5.5
+  License: Apache-2.0 (ESP-IDF root LICENSE); individual components may
+  carry other licenses, which must be reviewed for the exact versions
+  used.
+  Source:
+  https://github.com/espressif/esp-idf
+
+Arduino-ESP32 and ESP-IDF contain multiple components with different
+copyright and license terms. Their licenses must be reviewed from the exact
+versions used to build a particular firmware release.
+
+The following framework components are used by the boot managers where
+applicable:
+
+- WiFi, WebServer, HTTPClient
+- LittleFS, FS
+- Preferences, NVS APIs
+- OTA and partition APIs
+- FreeRTOS
+- QR code generation (beta; espressif qrcode component, Apache-2.0,
+  Copyright 2015-2021 Espressif Systems)
+
+These components are not relicensed under the MIT License of this repository.
+The applicable notices from Arduino-ESP32 and ESP-IDF remain in effect.
+
+Binary releases that link the Arduino-ESP32 core and other LGPL covered
+libraries must allow relinking or replacement of those libraries as
+required by their licenses, and must give recipients a copy of the LGPL
+text (LICENSES/LGPL-2.1.txt).
+
+3.1 Prebuilt bootloader (ESP-IDF, Apache-2.0)
+---------------------------------------------
+
+This repository ships prebuilt second-stage bootloaders built from ESP-IDF and
+modified by this repository:
+
+- ats-mini-recovery-beta/bootloader.bin
+- ats-mini-recovery-lite/bootloader.bin
+
+and a patch describing the modification:
+
+- ats-mini-recovery-beta/bootloader.patch
+
+ESP-IDF v5.5.5 is distributed by Espressif under the Apache License 2.0
+(some components under other licenses). The bootloader files above are
+derivative works of ESP-IDF. Their build and modification are documented in
+ats-mini-recovery-beta/bootloader.md and ats-mini-recovery-beta/bootloader.patch.
+
+When redistributing these files, follow the Apache License 2.0 terms:
+retain the applicable copyright, attribution and notice text, include a copy
+of the license (LICENSES/Apache-2.0.txt), and state that the files were
+modified (the date and the exact change are given by bootloader.md and
+bootloader.patch). The bootloader is provided "AS IS", without warranties or
+conditions of any kind, as stated in that license.
+
+Other prebuilt platform files that appear in release assets or in flash
+instructions (for example boot_app0.bin) come from the Arduino-ESP32
+platform package and are not covered by this repository's MIT License.
+Their copyright and license terms must be taken from the exact platform
+version they come from; this repository does not relicense them.
+
+4. External Arduino libraries
+-----------------------------
+
+The project uses the following external Arduino libraries.
+
+4.1 LovyanGFX
+-------------
+
+Library:
+- LovyanGFX
+
+Version used by this project:
+- 1.2.29
+
+Source:
+- https://github.com/lovyan03/LovyanGFX
+
+License:
+- LovyanGFX is distributed under the FreeBSD License (2-clause BSD style,
+  SPDX: BSD-2-Clause), Copyright (c) 2020 lovyan03. Its license.txt also
+  carries the notices of bundled code: Adafruit_ILI9341 (MIT), Adafruit_GFX
+  (BSD) and TFT_eSPI (FreeBSD).
+- The text as distributed by the library:
+  https://github.com/lovyan03/LovyanGFX/blob/master/license.txt
+- Verify against the exact source version used for each firmware release.
+
+5. File-system and storage components
+-------------------------------------
+
+The firmware uses LittleFS and Arduino FS functionality through the
+Arduino-ESP32 platform.
+
+The LittleFS wrapper shipped with Arduino-ESP32 (libraries/LittleFS) is
+Copyright 2015-2020 Espressif Systems and licensed under the Apache License
+2.0. Other LittleFS and FS related components may carry different terms.
+
+These components may be supplied as part of Arduino-ESP32 or its associated
+platform packages. Their applicable licenses and copyright notices must be
+taken from the exact platform version used to build each release.
+
+Do not assume that every file associated with LittleFS or FS has the same
+license. Review the relevant upstream notices before redistributing binary
+firmware.
+
+6. Hardware and related design materials
+----------------------------------------
+
+Hardware designs, schematics, PCB files, images, documentation, and other
+hardware-related materials are not automatically covered by the software
+license in this repository.
+
+The related ESP32S3-SI4732 receiver hardware and software project by Sunnygold
+is referenced by this project:
+
+- https://oshwhub.com/sunnygold/esp32s3-si4732-shou-yin-ji
+
+Where materials from that project are actually copied or redistributed, the
+applicable attribution and license terms must be followed.
+
+The license identified for the related hardware and design materials is:
+
+- CC BY-NC-SA 3.0
+
+Deed: https://creativecommons.org/licenses/by-nc-sa/3.0/
+
+This license may require:
+
+- Attribution to the original author
+- A link to the license
+- Indication of changes
+- Non-commercial use
+- Distribution of adaptations under the same or compatible terms
+
+The MIT license for software in this repository does not grant permission to
+commercially use third-party hardware designs, images, trademarks,
+documentation, or other separately licensed materials.
+
+7. Firmware binary distribution
+-------------------------------
+
+Firmware releases may contain code linked with or derived from third-party
+components, including GPL-3.0 covered Rotary encoder code (section 1).
+
+When distributing firmware binaries (a release download, a copied image, or
+an OTA update), retain or provide access to the applicable:
+
+- Copyright notices
+- License texts for each part that applies (for example GPL-3.0 for the
+  images containing Rotary, Apache-2.0 for the bootloaders)
+- Third-party notices (this NOTICE file)
+- Corresponding source code (required by GPL-3.0)
+- Statements of modification where a license requires them (GPL-3.0
+  section 5)
+- Relinking or replacement information where required by LGPL licenses
+
+Each firmware release must identify the source revision used to build the
+binary.
+
+The corresponding source code for a release must be available from the
+repository at the commit or tag used to build that release.
+
+8. Repository MIT license scope
+-------------------------------
+
+The repository MIT License covers the dual-boot / recovery source (boot
+manager sketches, partition tables, flashing/build scripts). It applies only to
+original code where no different copyright or license notice is provided.
+
+The bootloader binaries are not covered by the MIT License; they are modified
+ESP-IDF builds under Apache-2.0 (see section 3.1).
+
+The boot managers' source files are not all covered in the same way: the
+sketches, partition tables and flash scripts are original work under this
+MIT License, while Display.h descends from the upstream ATS Mini project
+(MIT, Copyright (c) 2025 ESP32-SI4732 Radio; see section 2). The built
+firmware images link the GPL-3.0 Rotary encoder implementation, so those
+images are distributed as GPL-3.0 covered works, not under MIT.
+
+A file or directory containing a different copyright or license notice is not
+relicensed under the repository MIT License.
+
+Third-party components retain their original copyright and license terms.
+
+See the repository LICENSE file for the MIT License and the applicable
+upstream license information.
+
+9. No official endorsement
+--------------------------
+
+Unless explicitly stated otherwise, this repository is not an official
+release, product, or endorsement of:
+
+- ESP32-SI4732
+- Espressif
+- Arduino
+- LovyanGFX
+- Sunnygold
+- Ben Buxton
+- Any other upstream project or copyright holder
+
+This NOTICE file is provided for attribution and license transparency. It does
+not replace the license text of any component.
