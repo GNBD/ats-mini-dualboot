@@ -5,68 +5,83 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ATS Mini Boot Manager — Web Installer</title>
 <style>
-  :root{--bg:#0e1116;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;
-    --acc:#1f6feb;--ok:#238636;--warn:#d29922;--del:#da3633;--code:#0d1117}
+  :root{
+    --bg:#f8fafc;--fg:#0f172a;--mut:#64748b;--card:#ffffff;--line:#e2e8f0;--chip:#f1f5f9;
+    --acc:#2563eb;--accfg:#ffffff;--ok:#16a34a;--warn:#d97706;--code:#f1f5f9;
+    --shadow:0 1px 2px rgba(15,23,42,.06),0 1px 3px rgba(15,23,42,.10);
+  }
+  html[data-theme="dark"]{
+    --bg:#0f172a;--fg:#e2e8f0;--mut:#94a3b8;--card:#1e293b;--line:#334155;--chip:#0b1220;
+    --acc:#3b82f6;--accfg:#ffffff;--ok:#22c55e;--warn:#f59e0b;--code:#0b1220;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.45);
+  }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);
-    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6}
-  .wrap{max-width:720px;margin:0 auto;padding:22px 18px 64px}
-  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
-    border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:16px}
-  h1{font-size:19px;margin:0}.sub{color:var(--mut);font-size:13px;margin:4px 0 0}
-  .langs{display:flex;gap:6px}
-  .langs button{background:var(--card);color:var(--mut);border:1px solid var(--line);
-    border-radius:8px;padding:6px 11px;font-size:13px;cursor:pointer}
-  .langs button.on{background:var(--acc);border-color:var(--acc);color:#fff}
-  .steps{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
-  .st{flex:1;min-width:70px;text-align:center;font-size:12px;color:var(--mut);
-    border:1px solid var(--line);border-radius:8px;padding:6px 4px}
-  .st.on{color:#fff;border-color:var(--acc);background:var(--acc)}
-  .st b{display:block;font-size:14px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
-  h2{font-size:16px;margin:0 0 8px}
-  h3{font-size:14px;margin:16px 0 6px;color:var(--mut)}
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:720px;margin:0 auto;padding:28px 18px 72px}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:20px}
+  h1{font-size:20px;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--mut);font-size:13px;margin:4px 0 0}
+  .top{display:flex;gap:8px;align-items:center}
+  .langs{display:flex;gap:4px;background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:3px}
+  .langs button{background:none;color:var(--mut);border:0;border-radius:7px;padding:6px 10px;font-size:13px;cursor:pointer}
+  .langs button.on{background:var(--card);color:var(--fg);box-shadow:var(--shadow)}
+  .iconbtn{background:var(--card);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;
+    font-size:16px;cursor:pointer;color:var(--fg)}
+  .steps{display:flex;gap:6px;margin:0 0 18px;flex-wrap:wrap}
+  .st{flex:1;min-width:66px;text-align:center;font-size:11.5px;color:var(--mut);
+    border:1px solid var(--line);border-radius:10px;padding:7px 4px;background:var(--card)}
+  .st b{display:block;font-size:13px}
+  .st.on{color:var(--accfg);border-color:var(--acc);background:var(--acc)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin:14px 0;box-shadow:var(--shadow)}
+  h2{font-size:16px;margin:0 0 4px;letter-spacing:-.01em}
+  h3{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin:18px 0 8px}
   p,li{font-size:14px}
-  .note{color:var(--mut);font-size:13px}
-  .btn{display:inline-block;padding:11px 18px;border:0;border-radius:10px;background:var(--acc);
-    color:#fff;font-size:15px;cursor:pointer}
-  .btn:hover{filter:brightness(1.1)}.btn:disabled{opacity:.45;cursor:default}
-  .btn.ok{background:var(--ok)}.btn.ghost{background:#30363d}.btn.sm{padding:8px 14px;font-size:13.5px}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
+  .note{color:var(--mut);font-size:13px;margin:4px 0}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;
+    border:1px solid transparent;border-radius:10px;background:var(--acc);color:var(--accfg);
+    font-size:14.5px;font-weight:600;cursor:pointer}
+  .btn:hover{filter:brightness(1.06)}.btn:disabled{opacity:.5;cursor:default}
+  .btn.ok{background:var(--ok)}.btn.ghost{background:transparent;color:var(--fg);border-color:var(--line)}
+  .btn.sm{padding:8px 14px;font-size:13px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0}
   .row.right{justify-content:flex-end}
-  input[type=file],input[type=text],select{background:var(--code);color:var(--fg);
-    border:1px solid var(--line);border-radius:8px;padding:8px;width:100%;margin:6px 0}
-  .chk{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;margin:8px 0;cursor:pointer}
-  .chk input{margin-top:3px}
-  .bar{height:10px;background:#21262d;border-radius:6px;overflow:hidden;margin:12px 0 6px}
+  input[type=file],input[type=text],select{background:var(--bg);color:var(--fg);
+    border:1px solid var(--line);border-radius:10px;padding:10px;width:100%;margin:6px 0;font-size:14px}
+  input:focus,select:focus{outline:2px solid var(--acc);outline-offset:0;border-color:var(--acc)}
+  .chk{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;margin:10px 0;cursor:pointer}
+  .chk input{width:auto;margin:3px 0 0}
+  .bar{height:8px;background:var(--chip);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:14px 0 8px}
   .fill{height:100%;width:0%;background:var(--acc);transition:width .15s}
   #status{font-size:13px;color:var(--mut);min-height:1.4em}
-  #log{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
-    height:180px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;
+  #log{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:12px;
+    height:190px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;
     white-space:pre-wrap;color:var(--mut);margin:0}
-  #licbox{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  #licbox{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:12px;
     height:150px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;
     white-space:pre-wrap;color:var(--mut);margin:0}
   .step{display:none}.step.on{display:block}
-  a{color:#58a6ff}
-  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:20;
-    align-items:center;justify-content:center;padding:20px}
+  a{color:var(--acc)}
+  .modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:20;
+    align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
   .modal.on{display:flex}
-  .mbox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;max-width:400px;width:100%}
-  @media(prefers-color-scheme:light){
-    :root{--bg:#f6f8fa;--card:#fff;--line:#d0d7de;--fg:#1f2328;--mut:#57606a;--code:#f0f3f6}
-    a{color:#0969da}
-  }
+  .mbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;
+    max-width:400px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,.3)}
 </style>
+<script>(function(){try{var t=localStorage.getItem("ats-theme");if(!t)t=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div><h1 data-i18n="title"></h1><p class="sub" data-i18n="sub"></p></div>
-    <div class="langs" id="langs">
-      <button data-lang="en">English</button>
-      <button data-lang="ru">Русский</button>
-      <button data-lang="ko">한국어</button>
+    <div class="top">
+      <div class="langs" id="langs">
+        <button data-lang="en">English</button>
+        <button data-lang="ru">Русский</button>
+        <button data-lang="ko">한국어</button>
+      </div>
+      <button class="iconbtn" id="theme" aria-label="Theme">◐</button>
     </div>
   </header>
 
@@ -257,6 +272,16 @@ document.querySelectorAll("#langs button").forEach(b=>b.addEventListener("click"
 
 const $=id=>document.getElementById(id);
 const logEl=$("log"), st=$("status"), fill=$("fill");
+function applyTheme(t){
+  document.documentElement.setAttribute("data-theme",t);
+  const b=$("theme"); if(b) b.textContent=(t==="dark")?"☀":"☾";
+  try{localStorage.setItem("ats-theme",t);}catch(e){}
+}
+(function(){
+  const t=document.documentElement.getAttribute("data-theme")||"light";
+  applyTheme(t);
+  $("theme").onclick=()=>applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
+})();
 const log=s=>{logEl.textContent+=s+"\n";logEl.scrollTop=logEl.scrollHeight;};
 const bar=p=>{fill.style.width=Math.max(0,Math.min(100,p))+"%";};
 const status=s=>{st.textContent=s;};
