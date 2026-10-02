@@ -11,6 +11,19 @@ power on ─> boot manager (recovery) ─> app0  (firmware A)
                                     └> app1  (firmware B)
 ```
 
+---
+
+## One-click web flasher (nothing to install)
+
+### **<https://gnbd.github.io/ats-mini-dualboot/install.html>**
+
+Open in Chrome/Edge → **Connect device** → (optional) app0/app1 firmware → accept the terms → **Flash!**
+Flashes the boot manager (recovery) and app firmware **right from the browser**. (v4.1.0 DES; merged images are trimmed to the app automatically.)
+
+Flashing guide: <https://gnbd.github.io/ats-mini-dualboot/flashing.html>
+
+---
+
 <img width="657" height="350" alt="Boot manager" src="https://github.com/user-attachments/assets/57f89dcb-ddf6-4baa-b854-d4935b872c86" />
 
 ## At a glance
