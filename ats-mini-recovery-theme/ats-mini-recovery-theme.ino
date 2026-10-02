@@ -21,6 +21,7 @@
 #include <esp_partition.h>
 #include <esp_flash.h>
 #include <esp_ota_ops.h>
+#include <esp_app_desc.h>
 #include <nvs_flash.h>
 #include <MD5Builder.h>
 #include <qrcode.h>
@@ -75,7 +76,7 @@ static constexpr const lgfx::IFont* FONT_TINY  = &lgfx::fonts::Font0;
 #define COL_KEY     RGB(7, 14, 7)     // keyboard key face
 #define COL_KEYSEL  RGB(20, 44, 17)   // keyboard selected key (same as COL_ACC)
 
-#define RECOVERY_VERSION "4.0.0"
+#define RECOVERY_VERSION "4.1.0"
 
 // Default: fetch this .txt (one URL per line). Local /update_url.txt and
 // DEFAULT_UPDATE_URLS are fallbacks when the remote list is unavailable.
@@ -126,14 +127,20 @@ static const char *menu[] = {
   "Boot App1",
   "Firmware Update",
   "Erase",
+  "Partition",
   "Settings"
 };
 #define MENU_COUNT (sizeof(menu) / sizeof(menu[0]))
 
-// Settings > ...  (Network / Brightness / About live here now)
+// Tiles that fit one page of the main menu (a 3x2 grid).
+#define MENU_PAGE_TILES 6
+
+// Settings > ...  (Network / Brightness / LittleFS / Backup / About)
 static const char *settingsMenu[] = {
   "Network",
   "Brightness",
+  "LittleFS",
+  "Backup",
   "About"
 };
 #define SETTINGS_COUNT (sizeof(settingsMenu) / sizeof(settingsMenu[0]))
@@ -740,6 +747,46 @@ static void saveWebEnabled(bool on)
   prefs.end();
 }
 
+// Optional HTTP Basic Auth for the web UI, kept with the other recovery
+// settings. It can be switched off, and stays off while no password is set.
+static bool gWebAuthOn = false;
+static String gWebUser = "admin";
+static String gWebPass;
+
+static void loadWebAuth()
+{
+  if(!prefs.begin("webcfg", true, STORAGE_PARTITION)) return;
+  gWebAuthOn = prefs.getBool("on", false);
+  gWebUser = prefs.getString("user", "admin");
+  gWebPass = prefs.getString("pass", "");
+  prefs.end();
+  if(gWebUser.length() == 0) gWebUser = "admin";
+  if(gWebPass.length() == 0) gWebAuthOn = false;
+}
+
+static void saveWebAuth()
+{
+  if(!prefs.begin("webcfg", false, STORAGE_PARTITION)) return;
+  prefs.putBool("on", gWebAuthOn);
+  prefs.putString("user", gWebUser);
+  prefs.putString("pass", gWebPass);
+  prefs.end();
+}
+
+static bool webAuthOk()
+{
+  if(!gWebAuthOn) return true;
+  return server.authenticate(gWebUser.c_str(), gWebPass.c_str());
+}
+
+// Sends the Basic Auth challenge when the request is not allowed.
+static bool webAuthed()
+{
+  if(webAuthOk()) return true;
+  server.requestAuthentication(BASIC_AUTH, "Boot Manager");
+  return false;
+}
+
 // The slot the user last chose, kept in the recovery's own settings. otadata
 // cannot be trusted for this: the bootloader patch forces the recovery on every
 // power-up and setup() rewrites otadata to the recovery slot each time, so the
@@ -987,6 +1034,15 @@ static bool bootloaderOk()
 #define DES_SETTINGS_SIZE   0x20000u
 #define DES_PT_SECTOR       (PARTITION_TABLE_ADDR / 4096u)
 
+// The two app slots share one 7 MB region; resizing only moves the boundary
+// between them, in 0.5 MB steps, so one slot can go from 1 MB to 6 MB.
+#define DES_APP0_OFFSET     0x10000u
+#define DES_APP_END         0x710000u
+#define DES_APP_TOTAL       (DES_APP_END - DES_APP0_OFFSET)
+#define DES_APP_MIN         0x100000u
+#define DES_APP_STEP        0x80000u
+#define DES_PT_B_SECTOR     (0xFFF000u / 4096u)
+
 static const uint8_t DES_LABEL_SETTINGS[16] = "settings";
 
 // Walks the entry list. Fails when the magic chain or the MD5 terminator is
@@ -1048,6 +1104,66 @@ static bool desBuildTable(uint8_t *buf, size_t len, uint8_t env)
   return true;
 }
 
+static uint32_t desGet32(const uint8_t *p)
+{
+  return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+         ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static void desPut32(uint8_t *p, uint32_t v)
+{
+  for(int i = 0; i < 4; i++) p[i] = (uint8_t)(v >> (8 * i));
+}
+
+// Locates the app0/app1 entries by label.
+static bool desFindAppEntries(const uint8_t *buf, size_t len,
+                              size_t *a0, size_t *a1)
+{
+  uint16_t numParts, settingsIdx;
+  size_t md5Pos;
+  if(!desParseTable(buf, len, &numParts, &settingsIdx, &md5Pos)) return false;
+
+  *a0 = (size_t)-1;
+  *a1 = (size_t)-1;
+  for(uint16_t i = 0; i < numParts; i++)
+  {
+    size_t pos = (size_t)i * DES_ENTRY_SIZE;
+    if(memcmp(buf + pos + 12, "app0", 4) == 0) *a0 = pos;
+    else if(memcmp(buf + pos + 12, "app1", 4) == 0) *a1 = pos;
+  }
+  return *a0 != (size_t)-1 && *a1 != (size_t)-1;
+}
+
+// App0 keeps its offset and grows or shrinks; app1 starts where app0 ends and
+// stretches to the end of the shared region.
+static void desSetAppSizes(uint8_t *buf, size_t len, uint32_t app0Size)
+{
+  size_t a0, a1;
+  if(!desFindAppEntries(buf, len, &a0, &a1)) return;
+  uint32_t a1off = DES_APP0_OFFSET + app0Size;
+  desPut32(buf + a0 + 8, app0Size);
+  desPut32(buf + a1 + 4, a1off);
+  desPut32(buf + a1 + 8, DES_APP_END - a1off);
+}
+
+// The app entries must form one contiguous region that ends at `ffat`, with
+// each slot at least DES_APP_MIN and everything sector aligned.
+static bool desAppLayoutOk(const uint8_t *buf, size_t len)
+{
+  size_t a0, a1;
+  if(!desFindAppEntries(buf, len, &a0, &a1)) return false;
+
+  uint32_t off0 = desGet32(buf + a0 + 4), size0 = desGet32(buf + a0 + 8);
+  uint32_t off1 = desGet32(buf + a1 + 4), size1 = desGet32(buf + a1 + 8);
+
+  if(off0 != DES_APP0_OFFSET) return false;
+  if(off1 != off0 + size0) return false;
+  if((uint64_t)off1 + size1 != DES_APP_END) return false;
+  if(size0 < DES_APP_MIN || size1 < DES_APP_MIN) return false;
+  if(((size0 | size1 | off1) & 0xFFFu) != 0) return false;
+  return true;
+}
+
 // The criteria the offline verifier applies: a parseable magic chain, exactly
 // one `settings` entry at the expected 64KB aligned address inside flash, and
 // a stored MD5 that matches a recomputation.
@@ -1070,6 +1186,7 @@ static bool desVerifyTable(const uint8_t *buf, size_t len, uint8_t env)
   if(off != want || size != DES_SETTINGS_SIZE) return false;
   if(off & 0xFFFu) return false;            // 4KB (only app slots need 64KB)
   if((uint64_t)off + size > 0x1000000ull) return false;
+  if(!desAppLayoutOk(buf, len)) return false;
 
   uint8_t stored[16];
   MD5Builder md5;
@@ -1211,8 +1328,22 @@ static bool desMatchesCanonical(const uint8_t *buf, size_t len)
     size_t pos = i * DES_ENTRY_SIZE;
     if(memcmp(buf + pos, DES_CANONICAL_TABLE + pos, DES_ENTRY_SIZE) == 0) continue;
 
-    // The `settings` entry is the only one allowed to differ, and only in its
-    // four offset bytes.
+    // The two app slots may move the boundary between them: app0 keeps its
+    // offset and only its size changes, app1's offset follows it.
+    bool isApp0 = memcmp(DES_CANONICAL_TABLE + pos + 12, "app0", 4) == 0;
+    bool isApp1 = memcmp(DES_CANONICAL_TABLE + pos + 12, "app1", 4) == 0;
+    if(isApp0 || isApp1)
+    {
+      if(memcmp(buf + pos, DES_CANONICAL_TABLE + pos, 4) != 0) return false;
+      if(memcmp(buf + pos + 12, DES_CANONICAL_TABLE + pos + 12, DES_ENTRY_SIZE - 12) != 0)
+        return false;
+      if(isApp0 && memcmp(buf + pos + 4, DES_CANONICAL_TABLE + pos + 4, 4) != 0)
+        return false;
+      continue;
+    }
+
+    // The `settings` entry is the only other one allowed to differ, and only
+    // in its four offset bytes.
     if(i != (size_t)cSettings) return false;
     if(memcmp(buf + pos, DES_CANONICAL_TABLE + pos, 4) != 0) return false;
     if(memcmp(buf + pos + 8, DES_CANONICAL_TABLE + pos + 8, DES_ENTRY_SIZE - 8) != 0)
@@ -1263,12 +1394,29 @@ static bool partitionTableOk()
 // that cannot be read at all still comes back to a known state.
 static bool desRebuildTable(uint8_t env)
 {
+  // A resized boundary is kept: when the slot on flash still parses, its app
+  // sizes are reused; otherwise the canonical 3.5 / 3.5 split comes back.
+  uint32_t app0Size = 0;
+  {
+    uint8_t *cur = (uint8_t *)malloc(DES_TABLE_SIZE);
+    if(cur)
+    {
+      size_t a0, a1;
+      if(ESP.flashRead(PARTITION_TABLE_ADDR, (uint32_t *)cur, DES_TABLE_SIZE)
+         && desAppLayoutOk(cur, DES_TABLE_SIZE)
+         && desFindAppEntries(cur, DES_TABLE_SIZE, &a0, &a1))
+        app0Size = desGet32(cur + a0 + 8);
+      free(cur);
+    }
+  }
+
   uint8_t *buf = (uint8_t *)malloc(DES_TABLE_SIZE);
   if(!buf) { Serial.println("rebuild: no memory"); return false; }
 
   // Everything past the embedded entries is erased flash, not zeroes.
   memset(buf, 0xFF, DES_TABLE_SIZE);
   memcpy(buf, DES_CANONICAL_TABLE, sizeof(DES_CANONICAL_TABLE));
+  if(app0Size) desSetAppSizes(buf, DES_TABLE_SIZE, app0Size);
 
   bool ok = desBuildTable(buf, DES_TABLE_SIZE, env)
          && desVerifyTable(buf, DES_TABLE_SIZE, env);
@@ -1584,6 +1732,10 @@ static void runBootModeMenu(bool isApp1)
 
     if(selected == 0)
     {
+      // Default boot starts the app only once the button is released, so the
+      // application is not launched with the press that chose it still down.
+      while(digitalRead(ENCODER_PUSH_BUTTON) == LOW) delay(10);
+      delay(30);
       bool ok = isApp1 ? bootToApp1() : bootToApp0();
       if(!ok) return;                      // empty slot -> back to main menu
     }
@@ -1598,12 +1750,39 @@ static void runBootModeMenu(bool isApp1)
 static void drawMenu(int selected)
 {
   static const int icons[MENU_COUNT] =
-    { ICON_SLOT0, ICON_SLOT1, ICON_UPDATE, ICON_ERASE, ICON_SETTINGS };
+    { ICON_SLOT0, ICON_SLOT1, ICON_UPDATE, ICON_ERASE, ICON_DB,
+      ICON_SETTINGS };
   static const uint16_t accs[MENU_COUNT] =
-    { COL_ACC, COL_ACC, COL_GOLD, COL_WARN, COL_OK };
+    { COL_ACC, COL_ACC, COL_GOLD, COL_WARN, COL_OK,
+      COL_OK };
 
-  drawTilePage("Boot Manager", gBootSlot, "TURN=MOVE", "HOLD=OPEN",
-               menu, icons, accs, MENU_COUNT, selected);
+  // Six tiles fill a page; the rest goes on the next page. The header keeps
+  // the live boot slot, and the page indicator sits centred in the hint bar.
+  int pages = (MENU_COUNT + MENU_PAGE_TILES - 1) / MENU_PAGE_TILES;
+  int base = (selected / MENU_PAGE_TILES) * MENU_PAGE_TILES;
+  int count = MENU_COUNT - base;
+  if(count > MENU_PAGE_TILES) count = MENU_PAGE_TILES;
+
+  // The hint bar right shows the web address while the server is up, so it can
+  // be typed into a phone without reading the serial log.
+  String ip = currentIp();
+  const char *hintR = "HOLD=OPEN";
+  if(gWebEnabled && ip.length() > 0 && ip != "-") hintR = ip.c_str();
+
+  drawTilePage("Boot Manager", gBootSlot, "TURN=MOVE", hintR,
+               &menu[base], &icons[base], &accs[base], count,
+               selected - base);
+
+  if(pages > 1)
+  {
+    char pg[8];
+    snprintf(pg, sizeof(pg), "%d/%d", base / MENU_PAGE_TILES + 1, pages);
+    gSprite.setTextDatum(TC_DATUM);
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString(pg, SCR_W / 2, 156, FONT_TINY);
+    gSprite.setTextDatum(TL_DATUM);
+    gSprite.pushSprite(0, 0);
+  }
 }
 
 static void drawWifiMenu(int selected)
@@ -1627,12 +1806,15 @@ static void drawWifiMenu(int selected)
 static void drawSettingsMenu(int selected)
 {
   static const int icons[SETTINGS_COUNT] =
-    {ICON_WIFI, ICON_BRIGHT, ICON_ABOUT};
-  static const uint16_t accs[SETTINGS_COUNT] = {COL_ACC, COL_OK, COL_GOLD};
+    {ICON_WIFI, ICON_BRIGHT, ICON_FOLDER, ICON_DB, ICON_ABOUT};
+  static const uint16_t accs[SETTINGS_COUNT] =
+    {COL_ACC, COL_OK, COL_GOLD, COL_OK, COL_ACC};
 
   static const char *hints[SETTINGS_COUNT] = {
     "Connect to a network",
     "LCD backlight level",
+    "Rename or delete files",
+    "Save or load app cfg",
     "Version, licenses, QR"
   };
 
@@ -1718,6 +1900,8 @@ static void runSettingsMenu()
 
     if(selected == 0) runWifiMenu();
     else if(selected == 1) runBrightness();
+    else if(selected == 2) runLittleFsManager();
+    else if(selected == 3) runBackupMenu();
     else runAbout();
 
     drawSettingsMenu(selected);
@@ -3384,6 +3568,7 @@ static String buildFileRows()
 
 static void handleRoot()
 {
+  if(!webAuthed()) return;
   uint32_t fsUsed  = LittleFS.usedBytes();
   uint32_t fsTotal = LittleFS.totalBytes();
   int fsPct = fsTotal ? (int)((uint64_t)fsUsed * 100 / fsTotal) : 0;
@@ -3424,30 +3609,78 @@ static void handleRoot()
     "#mtext{font-size:14px;margin-bottom:16px;word-break:break-word}"
     ".pbar{width:100%;height:8px;background:#21262d;border-radius:6px;overflow:hidden;display:none;margin-top:8px}"
     ".pfill{width:0%;height:100%;background:#1f6feb;transition:width .2s}"
+    ".tabs{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 12px}"
+    ".tab{flex:1;min-width:60px;text-align:center;padding:8px 6px;border:1px solid #30363d;"
+    "border-radius:8px;background:#161b22;color:#8b949e;font-size:13px;cursor:pointer}"
+    ".tab:hover{border-color:#388bfd}.tab.on{background:#1f6feb;border-color:#1f6feb;color:#fff}"
+    ".pane{display:none}.pane.on{display:block}"
     "</style></head><body><div class='wrap'>"
-    "<h1><span class='dot'></span>Boot Manager</h1>");
+    "<h1><span class='dot'></span>Boot Manager</h1>"
+    "<div class='tabs'>"
+    "<button class='tab on' data-tab='status'>Status</button>"
+    "<button class='tab' data-tab='firmware'>Firmware</button>"
+    "<button class='tab' data-tab='files'>Files</button>"
+    "<button class='tab' data-tab='network'>Network</button>"
+    "<button class='tab' data-tab='system'>System</button>"
+    "</div>");
 
-  html += F("<div class='card'><h2>Device</h2><div class='grid'>");
-  html += "<div class='k'>Recovery</div><div>v" RECOVERY_VERSION "</div>";
-  html += "<div class='k'>Chip</div><div>" + String(ESP.getChipModel()) +
-          " rev " + String((int)ESP.getChipRevision()) + "</div>";
-  html += "<div class='k'>Flash</div><div>" + fmtBytes(ESP.getFlashChipSize()) + "</div>";
-  html += "<div class='k'>MAC</div><div class='mono'>" + WiFi.macAddress() + "</div>";
+  // ---- Status ----
+  html += F("<div class='pane on' id='p-status'>");
+  html += F("<div class='card'><h2>App slots</h2>");
+  for(int s = 0; s < 2; s++)
+  {
+    const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
+      static_cast<esp_partition_subtype_t>(
+        s ? ESP_PARTITION_SUBTYPE_APP_OTA_1 : ESP_PARTITION_SUBTYPE_APP_OTA_0), NULL);
+    esp_app_desc_t d;
+    bool has = appImageOk(p) && esp_ota_get_partition_description(p, &d) == ESP_OK;
+    bool active = (gBootIsApp1 == (s == 1));
+
+    html += "<div class='row'><div class='fname'>";
+    html += (s ? "App1" : "App0");
+    if(active) html += " <span class='muted sm'>(active)</span>";
+    html += "<div class='muted sm'>";
+    html += has ? htmlEsc(String(d.project_name) + " " + d.version) : String("empty");
+    html += "</div></div><div class='acts'>";
+    html += "<button class='btn sm' data-act='boot' data-href='/boot?slot=" +
+            String(s) + "'>Boot</button>";
+    html += "</div></div>";
+  }
+  html += F("</div>");
+
+  html += F("<div class='card'><h2>Storage</h2><div class='grid'>");
+  uint8_t env = desGetCurrentEnv();
   html += "<div class='k'>Boot slot</div><div>" + String(gBootSlot) + "</div>";
-  html += "<div class='k'>Free heap</div><div>" + fmtBytes(ESP.getFreeHeap()) + "</div>";
-  bool sta = (WiFi.status() == WL_CONNECTED);
-  bool ap  = apModeActive;
-  String ssid = sta ? WiFi.SSID() : (ap ? "ats-recovery" : "");
-  html += "<div class='k'>SSID</div><div>" + htmlEsc(ssid.length() ? ssid : "-") + "</div>";
-  html += "<div class='k'>IP</div><div class='mono'>" + htmlEsc(currentIp()) + "</div>";
-  html += "<div class='k'>Mode</div><div>" +
-          String(sta ? (ap ? "AP+STA" : "Station") : (ap ? "AP" : "Offline")) + "</div>";
-  html += "<div class='k'>AP IP</div><div class='mono'>" +
-          htmlEsc(ap ? WiFi.softAPIP().toString() : String("-")) + "</div>";
-  html += "<div class='k'>Storage</div><div>" + fmtBytes(fsUsed) + " / " + fmtBytes(fsTotal) +
+  html += "<div class='k'>Environment</div><div>" +
+          (env == 0xFF ? String("?") : "ENV" + String(env)) + "</div>";
+  html += "<div class='k'>Used</div><div>" + fmtBytes(fsUsed) + " / " + fmtBytes(fsTotal) +
           " (" + String(fsPct) + "%)</div>";
+  html += "<div class='k'>Uptime</div><div>" + String(millis() / 1000) + " s</div>";
+  html += F("</div>");
+  html += "<div class='pbar' style='display:block;margin-top:12px'><div class='pfill' style='width:" +
+          String(fsPct) + "%'></div></div>";
+  html += F("</div>");
+  html += F("</div>");
+
+  // ---- Firmware ----
+  html += F("<div class='pane' id='p-firmware'>");
+  html += F("<div class='card'><h2>Upload</h2>"
+    "<input type='file' id='fi' accept='.bin,.txt,.nvs'>"
+    "<select id='tg'>"
+    "<option value='store'>Save to storage</option>"
+    "<option value='0'>Upload &amp; flash to App0</option>"
+    "<option value='1'>Upload &amp; flash to App1</option>"
+    "</select>"
+    "<button class='btn' id='ubtn' data-act='upload'>Upload</button></div>");
+  html += F("</div>");
+
+  // ---- Files ----
+  html += F("<div class='pane' id='p-files'><div class='card'><h2>Files</h2>");
+  html += buildFileRows();
   html += F("</div></div>");
 
+  // ---- Network ----
+  html += F("<div class='pane' id='p-network'>");
   html += F("<div class='card'><h2>WiFi</h2>"
     "<input type='text' id='wssid' placeholder='SSID'>"
     "<input type='password' id='wpass' placeholder='Password'>"
@@ -3457,7 +3690,17 @@ static void handleRoot()
     "</div>"
     "<div id='wlist'></div>"
     "<div id='wmsg' class='muted sm'></div></div>");
-
+  bool sta = (WiFi.status() == WL_CONNECTED);
+  bool ap  = apModeActive;
+  String ssid = sta ? WiFi.SSID() : (ap ? "ats-recovery" : "");
+  html += F("<div class='card'><h2>Network</h2><div class='grid'>");
+  html += "<div class='k'>SSID</div><div>" + htmlEsc(ssid.length() ? ssid : "-") + "</div>";
+  html += "<div class='k'>IP</div><div class='mono'>" + htmlEsc(currentIp()) + "</div>";
+  html += "<div class='k'>Mode</div><div>" +
+          String(sta ? (ap ? "AP+STA" : "Station") : (ap ? "AP" : "Offline")) + "</div>";
+  html += "<div class='k'>AP IP</div><div class='mono'>" +
+          htmlEsc(ap ? WiFi.softAPIP().toString() : String("-")) + "</div>";
+  html += F("</div></div>");
   html += F("<div class='card'><h2>Web server</h2><div class='grid'>");
   html += "<div class='k'>Status</div><div>" + String(gWebEnabled ? "ON" : "OFF") + "</div>";
   html += F("</div><div class='acts' style='margin-top:10px'>");
@@ -3467,33 +3710,34 @@ static void handleRoot()
     html += F("<button class='btn' data-act='web' data-href='/web?on=1'>Turn on</button>");
   html += F("</div></div>");
 
-  html += F("<div class='card'><h2>Actions</h2><div class='acts'>"
-    "<button class='btn' data-act='boot' data-href='/boot?slot=0'>Boot App0</button>"
-    "<button class='btn' data-act='boot' data-href='/boot?slot=1'>Boot App1</button>"
-    "</div></div>");
+  html += F("<div class='card'><h2>Web account</h2><div class='grid'>");
+  html += "<div class='k'>Login</div><div>" + String(gWebAuthOn ? "ON" : "OFF") + "</div>";
+  html += "<div class='k'>ID</div><div>" + htmlEsc(gWebUser) + "</div>";
+  html += F("</div>"
+    "<input type='text' id='auser' placeholder='ID'>"
+    "<input type='password' id='apass' placeholder='Password'>"
+    "<div class='acts'>"
+    "<button class='btn get' data-act='authset'>Save &amp; enable</button>");
+  if(gWebAuthOn)
+    html += F("<button class='btn del' data-act='authoff'>Disable</button>");
+  html += F("</div></div>");
 
-  html += F("<div class='card'><h2>Upload</h2>"
-    "<input type='file' id='fi' accept='.bin,.txt'>"
-    "<select id='tg'>"
-    "<option value='store'>Save to storage</option>"
-    "<option value='0'>Upload &amp; flash to App0</option>"
-    "<option value='1'>Upload &amp; flash to App1</option>"
-    "</select>"
-    "<button class='btn' id='ubtn' data-act='upload'>Upload</button>"
-    "<div class='pbar' id='ubar'><div class='pfill' id='ufill'></div></div>"
-    "<div id='ptxt' class='muted sm'></div></div>");
-
-  html += F("<div class='card' id='fcard' style='display:none'><h2>Flash</h2>"
-    "<div class='muted sm' id='fname'></div>"
-    "<div class='pbar' id='fbar'><div class='pfill' id='ffill'></div></div>"
-    "<div id='ftxt' class='muted sm'></div></div>");
-
-  html += F("<div class='card'><h2>Files</h2>");
-  html += buildFileRows();
   html += F("</div>");
 
+  // ---- System ----
+  html += F("<div class='pane' id='p-system'>");
+  html += F("<div class='card'><h2>Device</h2><div class='grid'>");
+  html += "<div class='k'>Recovery</div><div>v" RECOVERY_VERSION "</div>";
+  html += "<div class='k'>Chip</div><div>" + String(ESP.getChipModel()) +
+          " rev " + String((int)ESP.getChipRevision()) + "</div>";
+  html += "<div class='k'>Flash</div><div>" + fmtBytes(ESP.getFlashChipSize()) + "</div>";
+  html += "<div class='k'>MAC</div><div class='mono'>" + WiFi.macAddress() + "</div>";
+  html += "<div class='k'>Free heap</div><div>" + fmtBytes(ESP.getFreeHeap()) + "</div>";
+  html += "<div class='k'>Reset reason</div><div>" + String((int)esp_reset_reason()) + "</div>";
+  html += F("</div></div>");
   html += F("<div class='card'><h2>Partitions</h2>");
   html += buildPartitionRows();
+  html += F("</div>");
   html += F("</div>");
 
   html += F("<div class='modal' id='mbox'><div class='modalBox'>"
@@ -3502,48 +3746,62 @@ static void handleRoot()
     "<button class='btn ghost' id='mno'>No</button></div>"
     "</div></div>");
 
+  html += F("<div class='modal' id='pbox'><div class='modalBox'>"
+    "<div id='ptitle'></div>"
+    "<div class='pbar' id='pbar2' style='display:block;margin-top:10px'>"
+    "<div class='pfill' id='pfill2'></div></div>"
+    "<div id='pmsg' class='muted sm' style='margin-top:10px'></div>"
+    "</div></div>");
+
   html += F("<script>"
     "var busy=false;"
     "function $(id){return document.getElementById(id);}"
+    "function show(id){var ps=document.querySelectorAll('.pane');"
+    "for(var i=0;i<ps.length;i++)ps[i].classList.remove('on');"
+    "var t=document.getElementById('p-'+id);if(t)t.classList.add('on');"
+    "var bs=document.querySelectorAll('.tab');"
+    "for(var i=0;i<bs.length;i++)bs[i].classList.toggle('on',bs[i].getAttribute('data-tab')===id);}"
+    "var tabs=document.querySelectorAll('.tab');"
+    "for(var i=0;i<tabs.length;i++)tabs[i].addEventListener('click',function(e){"
+    "e.preventDefault();show(this.getAttribute('data-tab'));});"
+
+    // ---- progress modal ----
+    "function pOpen(t){$('ptitle').textContent=t;$('pfill2').style.width='0%';"
+    "$('pmsg').textContent='';$('pbox').style.display='flex';}"
+    "function pSet(p,m){$('pfill2').style.width=p+'%';$('pmsg').textContent=m;}"
+    "function pClose(){$('pbox').style.display='none';}"
 
     // ---- upload ----
     "function go(){if(busy)return;var f=$('fi').files[0];if(!f)return;"
     "var tg=$('tg').value;busy=true;$('ubtn').disabled=true;"
+    "pOpen(tg==='store'?'Uploading file':'Uploading firmware');"
     "var fd=new FormData();fd.append('file',f);var x=new XMLHttpRequest();"
-    "$('ubar').style.display='block';"
     "x.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);"
-    "$('ufill').style.width=p+'%';$('ptxt').textContent='Uploading '+p+'%';}};"
+    "pSet(p,'Uploading '+p+'%');}};"
     "x.onload=function(){busy=false;$('ubtn').disabled=false;"
-    "if(x.status>=400){$('ptxt').textContent='Rejected - device busy';return;}"
-    "if(tg!=='store'){$('ptxt').textContent='';startFlash(tg,f.name);}"
-    "else{$('ptxt').textContent='Done!';setTimeout(function(){location.reload();},800);}};"
-    "x.onerror=function(){$('ptxt').textContent='Failed.';"
+    "if(x.status>=400){pSet(100,'Rejected - device busy');return;}"
+    "if(tg!=='store'){startFlash(tg,f.name);}"
+    "else{pSet(100,'Saved');setTimeout(function(){pClose();location.reload();},800);}};"
+    "x.onerror=function(){pSet(100,'Upload failed');"
     "busy=false;$('ubtn').disabled=false;};"
     "x.open('POST','/upload');x.send(fd);}"
 
     // ---- flash progress ----
     "function startFlash(slot,name){"
-    "$('fcard').style.display='block';"
-    "$('fname').textContent=name+' -> App'+slot+' (reboots into it)';"
-    "$('fbar').style.display='block';$('ffill').style.width='0%';"
-    "$('ftxt').textContent='Starting...';"
+    "pOpen('Flashing App'+slot);pSet(0,'Starting...');"
     "fetch('/flash?slot='+slot+'&name='+encodeURIComponent(name))"
     ".then(function(r){if(!r.ok)throw new Error('busy');return r.json();}).then(function(){"
     "var last=Date.now();"
     "var iv=setInterval(function(){"
-    "if(Date.now()-last>30000){clearInterval(iv);"
-    "$('ftxt').textContent='Lost contact with the device';return;}"
+    "if(Date.now()-last>30000){clearInterval(iv);pSet(100,'Lost contact with the device');return;}"
     "fetch('/flashstatus').then(function(r){return r.json();}).then(function(s){"
     "last=Date.now();"
-    "if(s.pct>=0&&s.pct<=100){$('ffill').style.width=s.pct+'%';"
-    "$('ftxt').textContent=s.msg+' '+s.pct+'%';}"
-    "else if(s.pct===101){clearInterval(iv);$('ffill').style.width='100%';"
-    "$('ftxt').textContent='Done! Booting App'+slot+'...';}"
-    "else if(s.pct===102){clearInterval(iv);$('ftxt').textContent='Failed: '+s.msg;}"
-    "else if(!s.busy){clearInterval(iv);"
-    "$('ftxt').textContent='Flash is not running - device may have restarted';}"
+    "if(s.pct>=0&&s.pct<=100){pSet(s.pct,s.msg);}"
+    "else if(s.pct===101){clearInterval(iv);pSet(100,'Done! Booting App'+slot+'...');}"
+    "else if(s.pct===102){clearInterval(iv);pSet(100,'Failed: '+s.msg);}"
+    "else if(!s.busy){clearInterval(iv);pSet(100,'Device restarted');}"
     "}).catch(function(){});},400);})"
-    ".catch(function(){$('ftxt').textContent='Flash request failed - device busy?';});"
+    ".catch(function(){pSet(100,'Flash request failed - device busy?');});"
     "return false;}"
 
     // ---- wifi ----
@@ -3586,6 +3844,8 @@ static void handleRoot()
     "boot:['Boot','Reboot into this app?'],"
     "web:['Web server','Change the web server state?'],"
     "del:['Delete','Delete this file permanently?'],"
+    "authset:['Web account','Save and enable login?'],"
+    "authoff:['Web account','Disable login?'],"
     "get:['Download','Download this file?']};"
     "var mtarget=null;"
     "function askText(el,def){var s=el.getAttribute('data-name');"
@@ -3600,6 +3860,8 @@ static void handleRoot()
     "else if(a==='flash')startFlash(el.getAttribute('data-slot'),el.getAttribute('data-name'));"
     "else if(a==='get')location.href='/download?name='+encodeURIComponent(el.getAttribute('data-name'));"
     "else if(a==='del')location.href='/delete?name='+encodeURIComponent(el.getAttribute('data-name'));"
+    "else if(a==='authset')location.href='/webauth?on=1&user='+encodeURIComponent($('auser').value)+'&pass='+encodeURIComponent($('apass').value);"
+    "else if(a==='authoff')location.href='/webauth?on=0';"
     "else location.href=el.getAttribute('data-href');}"
     "document.addEventListener('click',function(e){"
     "var el=e.target.closest?e.target.closest('[data-act]'):null;"
@@ -3623,10 +3885,17 @@ static void handleRoot()
 
 static File uploadFile;
 static bool uploadRejected = false;
+static bool uploadDenied = false;
 
 static void handleUploadDone()
 {
   gUploadLastMs = 0;
+  if(uploadDenied)
+  {
+    uploadDenied = false;
+    server.requestAuthentication(BASIC_AUTH, "Boot Manager");
+    return;
+  }
   if(uploadRejected)
   {
     uploadRejected = false;
@@ -3641,9 +3910,10 @@ static void handleUpload()
   HTTPUpload& up = server.upload();
   if(up.status == UPLOAD_FILE_START)
   {
+    uploadDenied = !webAuthOk();
     uploadRejected = gFlashBusy;
     gUploadLastMs = millis();
-    if(uploadRejected) uploadFile = File();
+    if(uploadRejected || uploadDenied) uploadFile = File();
     else uploadFile = LittleFS.open("/" + String(up.filename.c_str()), FILE_WRITE);
   }
   else if(up.status == UPLOAD_FILE_WRITE)
@@ -3671,6 +3941,7 @@ static void busyPage()
 
 static void handleDelete()
 {
+  if(!webAuthed()) return;
   if(gFlashBusy || uploadBusy()) { busyPage(); return; }
 
   if(server.hasArg("name"))
@@ -3685,6 +3956,7 @@ static void handleDelete()
 
 static void handleBoot()
 {
+  if(!webAuthed()) return;
   if(gFlashBusy || uploadBusy()) { busyPage(); return; }
 
   int slot = server.hasArg("slot") ? server.arg("slot").toInt() : 0;
@@ -3743,6 +4015,7 @@ static void flashTask(void *arg)
 
 static void handleFlash()
 {
+  if(!webAuthed()) return;
   if(!server.hasArg("name") || !server.hasArg("slot"))
   {
     server.send(400, "application/json", "{\"ok\":false,\"err\":\"missing name/slot\"}");
@@ -3855,6 +4128,7 @@ static void runWifiAbout()
 
 static void handleDownload()
 {
+  if(!webAuthed()) return;
   if(!server.hasArg("name"))
   {
     server.send(400, "text/plain", "missing name");
@@ -3882,8 +4156,29 @@ static void handleDownload()
   f.close();
 }
 
+// Web UI account: stores the ID/PW and enables or disables Basic Auth.
+static void handleWebAuth()
+{
+  if(!webAuthed()) return;
+
+  bool on = server.hasArg("on") && server.arg("on") == "1";
+  if(on)
+  {
+    if(server.hasArg("user") && server.arg("user").length())
+      gWebUser = server.arg("user");
+    if(server.hasArg("pass") && server.arg("pass").length())
+      gWebPass = server.arg("pass");
+  }
+  gWebAuthOn = on && gWebPass.length() > 0;
+  saveWebAuth();
+
+  server.sendHeader("Location", "/");
+  server.send(302, "text/plain", "");
+}
+
 static void handleWebToggle()
 {
+  if(!webAuthed()) return;
   if(gFlashBusy || uploadBusy()) { busyPage(); return; }
 
   bool on = server.hasArg("on") ? (server.arg("on") == "1") : true;
@@ -3936,6 +4231,7 @@ static void ensureApStaMode()
 
 static void handleScan()
 {
+  if(!webAuthed()) return;
   ensureApStaMode();
 
   int n = WiFi.scanNetworks();
@@ -3958,6 +4254,7 @@ static void handleScan()
 
 static void handleConnect()
 {
+  if(!webAuthed()) return;
   if(!server.hasArg("ssid") || !server.arg("ssid").length())
   {
     server.send(400, "application/json", "{\"ok\":false}");
@@ -3982,6 +4279,7 @@ static void handleConnect()
 
 static void handleStatus()
 {
+  if(!webAuthed()) return;
   bool sta = (WiFi.status() == WL_CONNECTED);
   String j = "{\"connected\":";
   j += sta ? "true" : "false";
@@ -3998,6 +4296,7 @@ static void handleStatus()
 
 static void handleFlashStatus()
 {
+  if(!webAuthed()) return;
   int pct = -1;
   char msg[sizeof(gFlashMsg)] = {0};
   flashGetProgress(&pct, msg, sizeof(msg));
@@ -4056,6 +4355,7 @@ static void startWebBackground()
   server.on("/flash", HTTP_GET, handleFlash);
   server.on("/flashstatus", HTTP_GET, handleFlashStatus);
   server.on("/web", HTTP_GET, handleWebToggle);
+  server.on("/webauth", HTTP_GET, handleWebAuth);
   server.on("/scan", HTTP_GET, handleScan);
   server.on("/connect", HTTP_GET, handleConnect);
   server.on("/status", HTTP_GET, handleStatus);
@@ -4068,7 +4368,7 @@ static void startWebBackground()
 // About (5 pages)
 // ---------------------------------------------------------------------------
 
-#define ABOUT_PAGES 5
+#define ABOUT_PAGES 4
 
 static void displayQRCode(esp_qrcode_handle_t qrcode)
 {
@@ -4141,26 +4441,7 @@ static void drawAboutPage(int page)
     case 3:
     {
       gSprite.setTextColor(COL_TEXT, COL_BG);
-      gSprite.drawString("Recovery Help", 8, 34, FONT_SMALL);
-      gSprite.drawString("Boot App0/1", 8, 50, FONT_SMALL);
-      gSprite.drawString("Firmware Upd", 8, 66, FONT_SMALL);
-      gSprite.drawString("WiFi", 8, 82, FONT_SMALL);
-      gSprite.drawString("Setting/About", 8, 98, FONT_SMALL);
-      gSprite.drawString("Erase", 8, 114, FONT_SMALL);
-      gSprite.drawString("About", 8, 130, FONT_SMALL);
-      gSprite.setTextColor(COL_MUTED, COL_BG);
-      gSprite.drawString("slot + mode", 110, 50, FONT_SMALL);
-      gSprite.drawString("Local/Network", 110, 66, FONT_SMALL);
-      gSprite.drawString("scan+password", 110, 82, FONT_SMALL);
-      gSprite.drawString("IP + web switch", 110, 98, FONT_SMALL);
-      gSprite.drawString("Factory/partitions", 110, 114, FONT_SMALL);
-      gSprite.drawString("this screen", 110, 130, FONT_SMALL);
-      break;
-    }
-    case 4:
-    {
-      gSprite.setTextColor(COL_TEXT, COL_BG);
-      gSprite.drawString("Flash Help (esptool)", 8, 34, FONT_SMALL);
+      gSprite.drawString("Partition", 8, 34, FONT_SMALL);
       gSprite.setTextColor(COL_MUTED, COL_BG);
 
       // 현재 파티션 테이블을 그대로 나열 (2열)
@@ -4255,6 +4536,658 @@ static void runWifiMenu()
 }
 
 // ---------------------------------------------------------------------------
+// On-screen text input (same keypad as the WiFi password)
+// ---------------------------------------------------------------------------
+
+static void drawKb()
+{
+  for(int i = 0; i < kbKeyCount; i++)
+  {
+    const KbKey &k = kbKeys[i];
+    bool sel = (i == kbCursor);
+    uint16_t bg = sel ? COL_KEYSEL : COL_KEY;
+    uint16_t fg = sel ? COL_BG : COL_TEXT;
+    gSprite.fillRoundRect(k.x, k.y, k.w, k.h, 3, bg);
+    gSprite.setTextColor(fg, bg);
+    gSprite.setTextDatum(MC_DATUM);
+    int cx = k.x + k.w / 2;
+    int cy = k.y + k.h / 2;
+    if(k.type == KB_MODE)
+      gSprite.drawString(KB_MODE_NAMES[(int)k.ch], cx, cy, FONT_SMALL);
+    else if(k.type == KB_BSP)
+      gSprite.drawString("BSP", cx, cy, FONT_SMALL);
+    else if(k.type == KB_CANCEL)
+      gSprite.drawString("X", cx, cy, FONT_SMALL);
+    else if(k.type == KB_SPACE)
+      gSprite.drawString("SPACE", cx, cy, FONT_SMALL);
+    else
+    {
+      char s[2] = {k.ch, 0};
+      gSprite.drawString(s, cx, cy, FONT_SMALL);
+    }
+  }
+  gSprite.setTextDatum(TL_DATUM);
+}
+
+// Returns true with `out` filled when held to accept. A blank result is
+// rejected, so an existing name is never replaced by nothing.
+static bool runTextInput(const char *title, const String &initial, String &out,
+                        const char *suffix = nullptr)
+{
+  String value = initial;
+  String tail = suffix ? suffix : "";
+  kbMode = 0;
+  kbCursor = 0;
+
+  auto redraw = [&]()
+  {
+    gSprite.fillScreen(COL_BG);
+    uiDotGrid();
+    drawHeader(title);
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString("Name:", 8, 34, FONT_SMALL);
+    gSprite.setTextColor(COL_TEXT, COL_BG);
+    String shown = value;
+    if((int)shown.length() > 18) shown = shown.substring(shown.length() - 18);
+    gSprite.drawString(shown + "_", 58, 34, FONT_SMALL);
+    if(tail.length())
+    {
+      // Fixed extension shown at the far right: it is added on save and can
+      // never be edited away.
+      gSprite.setTextDatum(TR_DATUM);
+      gSprite.setTextColor(COL_MUTED, COL_BG);
+      gSprite.drawString(tail, 312, 34, FONT_SMALL);
+      gSprite.setTextDatum(TL_DATUM);
+    }
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString("HOLD=OK  X=CANCEL", 8, 62, FONT_SMALL);
+    kbBuild(kbMode, 80);
+    drawKb();
+    gSprite.pushSprite(0, 0);
+  };
+
+  redraw();
+  while(true)
+  {
+    int8_t d = readEncoder(false);
+    if(kbHandleEncoder(d)) redraw();
+
+    uint32_t h = readButton();
+    if(h >= 300)
+    {
+      if(value.length() == 0) { redraw(); continue; }
+      out = value + tail;
+      return true;
+    }
+    if(h > 0)
+    {
+      const KbKey &k = kbKeys[kbCursor];
+      if(k.type == KB_CHAR) { if(value.length() < 28) value += k.ch; }
+      else if(k.type == KB_MODE) { kbMode = (int)k.ch; kbCursor = 0; }
+      else if(k.type == KB_BSP) { if(value.length()) value.remove(value.length() - 1); }
+      else if(k.type == KB_SPACE) { if(value.length() < 28) value += ' '; }
+      else if(k.type == KB_CANCEL) return false;
+      redraw();
+    }
+    delay(10);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LittleFS file manager
+// ---------------------------------------------------------------------------
+
+#define FS_ROWS 6
+
+static int fsListFiles(String *names, int maxCount)
+{
+  int count = 0;
+  File root = LittleFS.open("/", "r");
+  if(!root || !root.isDirectory()) return 0;
+
+  File file = root.openNextFile();
+  while(file && count < maxCount)
+  {
+    if(!file.isDirectory()) names[count++] = file.name();
+    file = root.openNextFile();
+  }
+  root.close();
+  return count;
+}
+
+static void drawFsPage(String *files, int count, int selected)
+{
+  gSprite.fillScreen(COL_BG);
+  uiDotGrid();
+
+  char right[16];
+  snprintf(right, sizeof(right), "%d", count);
+  drawHeader("LITTLEFS", right);
+
+  uint32_t total = LittleFS.totalBytes();
+  uint32_t used = LittleFS.usedBytes();
+  if(total > 0)
+  {
+    char cap[44];
+    snprintf(cap, sizeof(cap), "Used %luK/%luK  Free %luK",
+             (unsigned long)(used / 1024), (unsigned long)(total / 1024),
+             (unsigned long)((total - used) / 1024));
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString(cap, 8, 28, FONT_TINY);
+  }
+
+  char pb[16] = "";
+
+  if(count == 0)
+  {
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString("No files", 8, 50, FONT_SMALL);
+  }
+  else
+  {
+    int start = (selected / FS_ROWS) * FS_ROWS;
+    int end = start + FS_ROWS;
+    if(end > count) end = count;
+    for(int i = start; i < end; i++)
+      uiRow(8, 46 + (i - start) * 17, 304, 15, files[i].c_str(),
+            i == selected, COL_GOLD);
+
+    int pages = (count + FS_ROWS - 1) / FS_ROWS;
+    snprintf(pb, sizeof(pb), "%d/%d", start / FS_ROWS + 1, pages);
+  }
+
+  // The hint bar clears the bottom strip, so the page indicator is drawn after
+  // it or it would be wiped before the sprite is pushed.
+  uiHintBar("HOLD=ACTION", "CLICK=BACK");
+  if(pb[0])
+  {
+    gSprite.setTextDatum(TC_DATUM);
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString(pb, SCR_W / 2, 156, FONT_TINY);
+    gSprite.setTextDatum(TL_DATUM);
+  }
+  gSprite.pushSprite(0, 0);
+}
+
+static void runLittleFsManager()
+{
+  static const int maxFiles = 40;
+  String files[maxFiles];
+
+  int count = fsListFiles(files, maxFiles);
+  int selected = 0;
+  drawFsPage(files, count, selected);
+
+  static const char *actions[] = {"Rename", "Delete"};
+  static const int aIcons[2] = {ICON_SETTINGS, ICON_TRASH};
+  static const uint16_t aAccs[2] = {COL_ACC, COL_WARN};
+
+  while(true)
+  {
+    int8_t d = readEncoder();
+    if(d && count > 0)
+    {
+      selected = (selected + d) % count;
+      if(selected < 0) selected += count;
+      drawFsPage(files, count, selected);
+    }
+
+    uint32_t h = readButton();
+    if(h == 0) { delay(10); continue; }
+    if(h < 300) return;                       // click = back
+
+    if(count == 0) continue;
+
+    int act = runTileChoice("FILE", "TURN=MOVE", "CLICK=BACK  HOLD=OK",
+                            actions, aIcons, aAccs, 2);
+    if(act < 0) { drawFsPage(files, count, selected); continue; }
+
+    String path = "/" + files[selected];
+    if(act == 0)
+    {
+      String newName;
+      if(runTextInput("RENAME", files[selected], newName))
+      {
+        String target = "/" + newName;
+        bool ok = (target != path) && LittleFS.rename(path, target);
+        uiWarn(ok ? "Renamed" : "Rename failed");
+      }
+    }
+    else if(confirmDialog("DELETE", files[selected].c_str(), "This cannot be undone"))
+    {
+      bool ok = LittleFS.remove(path);
+      uiWarn(ok ? "Deleted" : "Delete failed");
+    }
+
+    count = fsListFiles(files, maxFiles);
+    if(selected >= count) selected = (count > 0) ? count - 1 : 0;
+    drawFsPage(files, count, selected);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Partition manager
+// ---------------------------------------------------------------------------
+
+static void runPartitionInfo()
+{
+  const int maxParts = 16;
+  const esp_partition_t *parts[maxParts];
+  int n = 0;
+  esp_partition_iterator_t it =
+    esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+  while(it && n < maxParts)
+  {
+    parts[n++] = esp_partition_get(it);
+    it = esp_partition_next(it);
+  }
+
+  const int rowsPerPage = 6;
+  int pages = (n + rowsPerPage - 1) / rowsPerPage;
+  if(pages < 1) pages = 1;
+  int page = 0;
+
+  auto draw = [&]()
+  {
+    gSprite.fillScreen(COL_BG);
+    uiDotGrid();
+    char right[16];
+    snprintf(right, sizeof(right), "%d/%d", page + 1, pages);
+    drawHeader("PARTITIONS", right);
+
+    int start = page * rowsPerPage;
+    for(int i = start; i < n && i < start + rowsPerPage; i++)
+    {
+      int y = 30 + (i - start) * 18;
+      char line[40];
+      snprintf(line, sizeof(line), "%s", parts[i]->label);
+      gSprite.setTextColor(COL_TEXT, COL_BG);
+      gSprite.drawString(line, 8, y, FONT_SMALL);
+      snprintf(line, sizeof(line), "0x%06X", (unsigned)parts[i]->address);
+      gSprite.setTextColor(COL_MUTED, COL_BG);
+      gSprite.drawString(line, 110, y, FONT_SMALL);
+      snprintf(line, sizeof(line), "%uK", (unsigned)(parts[i]->size / 1024));
+      gSprite.drawString(line, 240, y, FONT_SMALL);
+    }
+
+    uiHintBar("Rotate=Page", "CLICK=BACK");
+    gSprite.pushSprite(0, 0);
+  };
+
+  draw();
+  while(true)
+  {
+    int8_t d = readEncoder();
+    if(d)
+    {
+      page = (page + d) % pages;
+      if(page < 0) page += pages;
+      draw();
+    }
+    uint32_t h = readButton();
+    if(h > 0) return;
+    delay(10);
+  }
+}
+
+static void runPartitionRepair()
+{
+  if(!confirmDialog("REPAIR", "Rebuild partition", "table from canonical?"))
+    return;
+
+  uint8_t env = desGetCurrentEnv();
+  if(env == 0xFF) env = 0;
+
+  if(desRebuildTable(env))
+  {
+    uiWarn("Repaired, restarting");
+    delay(600);
+    ESP.restart();
+  }
+  uiWarn("Repair failed");
+}
+
+static uint32_t desCurrentApp0Size()
+{
+  uint32_t size = 0;
+  uint8_t *buf = (uint8_t *)malloc(DES_TABLE_SIZE);
+  if(buf)
+  {
+    size_t a0, a1;
+    if(ESP.flashRead(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE)
+       && desAppLayoutOk(buf, DES_TABLE_SIZE)
+       && desFindAppEntries(buf, DES_TABLE_SIZE, &a0, &a1))
+      size = desGet32(buf + a0 + 8);
+    free(buf);
+  }
+  if(size == 0) size = 0x380000u;            // canonical 3.5 / 3.5
+  return size;
+}
+
+// Moves the app0/app1 boundary in the table already on flash, keeping the
+// `settings` retargeting untouched, writes the active slot at 0x8000 and
+// refreshes the Table B backup at 0xFFF000 with the same bytes.
+static bool desApplyResize(uint32_t app0Size, uint8_t env)
+{
+  uint8_t *buf = (uint8_t *)malloc(DES_TABLE_SIZE);
+  if(!buf) return false;
+
+  bool ok = ESP.flashRead(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE);
+  if(ok)
+  {
+    desSetAppSizes(buf, DES_TABLE_SIZE, app0Size);
+    ok = desBuildTable(buf, DES_TABLE_SIZE, env)
+      && desVerifyTable(buf, DES_TABLE_SIZE, env);
+  }
+  if(ok)
+  {
+    esp_flash_set_dangerous_write_protection(esp_flash_default_chip, false);
+    ok = ESP.flashEraseSector(DES_PT_SECTOR)
+      && ESP.flashWrite(PARTITION_TABLE_ADDR, (uint32_t *)buf, DES_TABLE_SIZE);
+    esp_flash_set_dangerous_write_protection(esp_flash_default_chip, true);
+  }
+  if(ok)
+  {
+    ESP.flashEraseSector(DES_PT_B_SECTOR);
+    ESP.flashWrite(0xFFF000, (uint32_t *)buf, DES_TABLE_SIZE);
+  }
+  free(buf);
+  return ok;
+}
+
+static void drawResize(int step, int steps, uint32_t app0, uint32_t app1)
+{
+  gSprite.fillScreen(COL_BG);
+  uiDotGrid();
+  drawHeader("RESIZE");
+
+  const int x = 16, w = 288, y = 78, h = 28;
+  int w0 = (int)((uint64_t)w * app0 / DES_APP_TOTAL);
+  gSprite.fillRoundRect(x, y, w, h, 4, COL_TRACK);
+  gSprite.fillRoundRect(x, y, w0, h, 4, COL_ACC);
+  gSprite.fillRoundRect(x + w0, y, w - w0, h, 4, COL_GOLD);
+  gSprite.drawRoundRect(x, y, w, h, 4, COL_LINE);
+
+  char buf[40];
+  gSprite.setTextDatum(TC_DATUM);
+  snprintf(buf, sizeof(buf), "App0 %lu.%luM", (unsigned long)(app0 >> 20),
+           (unsigned long)((app0 >> 19) & 1) * 5);
+  gSprite.setTextColor(COL_ACC, COL_BG);
+  gSprite.drawString(buf, SCR_W / 2, 40, FONT_SMALL);
+  snprintf(buf, sizeof(buf), "App1 %lu.%luM", (unsigned long)(app1 >> 20),
+           (unsigned long)((app1 >> 19) & 1) * 5);
+  gSprite.setTextColor(COL_GOLD, COL_BG);
+  gSprite.drawString(buf, SCR_W / 2, 58, FONT_SMALL);
+  gSprite.setTextDatum(TL_DATUM);
+
+  gSprite.setTextColor(COL_MUTED, COL_BG);
+  gSprite.drawString("Turn to move the boundary", 8, 116, FONT_TINY);
+
+  char pg[16];
+  snprintf(pg, sizeof(pg), "%d/%d", step + 1, steps);
+  uiHintBar("TURN=MOVE", "HOLD=APPLY");
+  gSprite.setTextDatum(TC_DATUM);
+  gSprite.setTextColor(COL_MUTED, COL_BG);
+  gSprite.drawString(pg, SCR_W / 2, 156, FONT_TINY);
+  gSprite.setTextDatum(TL_DATUM);
+  gSprite.pushSprite(0, 0);
+}
+
+// Shown when the boundary cannot move: both slots must be blank, because a
+// slot that still holds an image would be cut in half by a smaller size.
+static void showResizeBlocked()
+{
+  gSprite.fillScreen(COL_BG);
+  uiDotGrid();
+  drawHeader("RESIZE");
+
+  gSprite.setTextColor(COL_WARN, COL_BG);
+  gSprite.drawString("Cannot resize yet", 8, 34, FONT_SMALL);
+
+  gSprite.setTextColor(COL_TEXT, COL_BG);
+  gSprite.drawString("Both app slots must be", 8, 58, FONT_SMALL);
+  gSprite.drawString("empty before the boundary", 8, 76, FONT_SMALL);
+  gSprite.drawString("can move.", 8, 94, FONT_SMALL);
+
+  gSprite.setTextColor(COL_MUTED, COL_BG);
+  gSprite.drawString("Erase > App0 and App1 first.", 8, 116, FONT_SMALL);
+
+  uiHintBar("", "CLICK=BACK");
+  gSprite.pushSprite(0, 0);
+
+  while(readButton() == 0) delay(10);
+}
+
+static void runPartitionResize()
+{
+  // A slot that still holds something cannot be shrunk under it, so the
+  // boundary only moves while both app slots are empty.
+  const esp_partition_t *a0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
+    static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_0), NULL);
+  const esp_partition_t *a1 = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
+    static_cast<esp_partition_subtype_t>(ESP_PARTITION_SUBTYPE_APP_OTA_1), NULL);
+  if(appImageOk(a0) || appImageOk(a1))
+  {
+    showResizeBlocked();
+    return;
+  }
+
+  const int steps = (DES_APP_TOTAL - 2 * DES_APP_MIN) / DES_APP_STEP + 1;
+  int step = (int)((desCurrentApp0Size() - DES_APP_MIN) / DES_APP_STEP);
+  if(step < 0) step = 0;
+  if(step >= steps) step = steps - 1;
+
+  auto app0At = [&](int s) { return DES_APP_MIN + (uint32_t)s * DES_APP_STEP; };
+  drawResize(step, steps, app0At(step), DES_APP_TOTAL - app0At(step));
+
+  while(true)
+  {
+    int8_t d = readEncoder();
+    if(d)
+    {
+      step += d;
+      if(step < 0) step = 0;
+      if(step >= steps) step = steps - 1;
+      drawResize(step, steps, app0At(step), DES_APP_TOTAL - app0At(step));
+    }
+
+    uint32_t h = readButton();
+    if(h == 0) { delay(10); continue; }
+    if(h < 300) return;                       // click = back
+    break;                                    // hold = apply
+  }
+
+  uint32_t app0Size = app0At(step);
+  if(app0Size == desCurrentApp0Size()) { uiWarn("Unchanged"); return; }
+  if(!confirmDialog("RESIZE", "Rewrite the partition", "table now?")) return;
+
+  uint8_t env = desGetCurrentEnv();
+  if(env == 0xFF) env = 0;
+
+  if(!desApplyResize(app0Size, env))
+  {
+    uiWarn("Resize failed");
+    return;
+  }
+  uiWarn("Resized, restarting");
+  delay(600);
+  ESP.restart();
+}
+
+static void runPartitionManager()
+{
+  static const char *items[] = {"Info", "Resize", "Repair"};
+  static const int icons[3] = {ICON_DB, ICON_SETTINGS, ICON_UPDATE};
+  static const uint16_t accs[3] = {COL_ACC, COL_GOLD, COL_OK};
+
+  int m = runTileChoice("PARTITION", "TURN=MOVE", "CLICK=BACK  HOLD=OPEN",
+                        items, icons, accs, 3);
+  if(m < 0) return;
+  if(m == 0) runPartitionInfo();
+  else if(m == 1) runPartitionResize();
+  else runPartitionRepair();
+}
+
+// ---------------------------------------------------------------------------
+// Settings backup / restore
+//
+// Each environment keeps its NVS in a 128 KB `settings` region (ENV0 at
+// DES_SETTINGS_ENV0, ENV1 at DES_SETTINGS_ENV1), so a raw copy of that region
+// is a complete backup of the app's settings. Export writes it to a LittleFS
+// file whose name is typed on the same keypad as the WiFi password; Import
+// writes such a file back and reboots so the app re-reads it.
+// ---------------------------------------------------------------------------
+
+#define BK_CHUNK 256
+
+static bool backupSettingsRegion(uint32_t addr, const char *path)
+{
+  File f = LittleFS.open(path, FILE_WRITE);
+  if(!f) return false;
+
+  uint32_t buf[BK_CHUNK / 4];
+  bool ok = true;
+  for(uint32_t off = 0; off < DES_SETTINGS_SIZE && ok; off += BK_CHUNK)
+  {
+    ok = ESP.flashRead(addr + off, buf, BK_CHUNK)
+      && f.write((const uint8_t *)buf, BK_CHUNK) == BK_CHUNK;
+  }
+  f.close();
+  return ok;
+}
+
+static bool restoreSettingsRegion(uint32_t addr, const char *path)
+{
+  File f = LittleFS.open(path, "r");
+  if(!f) return false;
+  if(f.size() != DES_SETTINGS_SIZE) { f.close(); return false; }
+
+  uint32_t buf[BK_CHUNK / 4];
+  bool ok = true;
+
+  esp_flash_set_dangerous_write_protection(esp_flash_default_chip, false);
+  for(uint32_t s = 0; s < DES_SETTINGS_SIZE / 4096 && ok; s++)
+    ok = ESP.flashEraseSector((addr >> 12) + s);
+  for(uint32_t off = 0; off < DES_SETTINGS_SIZE && ok; off += BK_CHUNK)
+  {
+    if(f.read((uint8_t *)buf, BK_CHUNK) != BK_CHUNK) { ok = false; break; }
+    ok = ESP.flashWrite(addr + off, buf, BK_CHUNK);
+  }
+  esp_flash_set_dangerous_write_protection(esp_flash_default_chip, true);
+  f.close();
+  return ok;
+}
+
+// File picker for Import: only `.nvs` backups, hold to accept.
+static bool pickBackupFile(String &out)
+{
+  static const int maxFiles = 40;
+  String all[maxFiles];
+  String files[maxFiles];
+  int n = fsListFiles(all, maxFiles);
+  int count = 0;
+  for(int i = 0; i < n; i++)
+    if(all[i].endsWith(".nvs")) files[count++] = all[i];
+  if(count == 0) { uiWarn("No .nvs files"); return false; }
+
+  int sel = 0;
+  auto draw = [&]()
+  {
+    gSprite.fillScreen(COL_BG);
+    uiDotGrid();
+    char r[16];
+    snprintf(r, sizeof(r), "%d", count);
+    drawHeader("SELECT FILE", r);
+
+    int start = (sel / FS_ROWS) * FS_ROWS;
+    int end = start + FS_ROWS;
+    if(end > count) end = count;
+    for(int i = start; i < end; i++)
+      uiRow(8, 40 + (i - start) * 18, 304, 16, files[i].c_str(),
+            i == sel, COL_GOLD);
+
+    uiHintBar("HOLD=OK", "CLICK=BACK");
+    gSprite.pushSprite(0, 0);
+  };
+
+  draw();
+  while(true)
+  {
+    int8_t d = readEncoder();
+    if(d) { sel = (sel + d) % count; if(sel < 0) sel += count; draw(); }
+
+    uint32_t h = readButton();
+    if(h == 0) { delay(10); continue; }
+    if(h < 300) return false;                 // click = back
+    out = files[sel];
+    return true;
+  }
+}
+
+static int pickBackupTarget()
+{
+  static const char *items[] = {"App0 cfg", "App1 cfg"};
+  static const int icons[2] = {ICON_SLOT0, ICON_SLOT1};
+  static const uint16_t accs[2] = {COL_ACC, COL_ACC};
+  return runTileChoice("TARGET", "TURN=MOVE", "CLICK=BACK  HOLD=OK",
+                       items, icons, accs, 2);
+}
+
+static void runBackupExport()
+{
+  int t = pickBackupTarget();
+  if(t < 0) return;
+
+  const char *initial = (t == 1) ? "app1" : "app0";
+  String name;
+  if(!runTextInput("SAVE AS", initial, name, ".nvs")) return;
+
+  uint32_t addr = (t == 1) ? DES_SETTINGS_ENV1 : DES_SETTINGS_ENV0;
+  String path = "/" + name;
+  char msg[48];
+  if(backupSettingsRegion(addr, path.c_str()))
+    snprintf(msg, sizeof(msg), "Saved %s", name.c_str());
+  else
+    snprintf(msg, sizeof(msg), "Save failed");
+  uiWarn(msg);
+}
+
+static void runBackupImport()
+{
+  String file;
+  if(!pickBackupFile(file)) return;
+
+  int t = pickBackupTarget();
+  if(t < 0) return;
+
+  if(!confirmDialog("RESTORE", file.c_str(), "overwrite that cfg?")) return;
+
+  uint32_t addr = (t == 1) ? DES_SETTINGS_ENV1 : DES_SETTINGS_ENV0;
+  String path = "/" + file;
+  if(!restoreSettingsRegion(addr, path.c_str()))
+  {
+    uiWarn("Restore failed (size?)");
+    return;
+  }
+  uiWarn("Restored, restarting");
+  delay(600);
+  ESP.restart();
+}
+
+static void runBackupMenu()
+{
+  static const char *items[] = {"Export", "Import"};
+  static const int icons[2] = {ICON_UPDATE, ICON_DB};
+  static const uint16_t accs[2] = {COL_OK, COL_GOLD};
+
+  int m = runTileChoice("BACKUP", "TURN=MOVE", "CLICK=BACK  HOLD=OPEN",
+                        items, icons, accs, 2);
+  if(m < 0) return;
+  if(m == 0) runBackupExport();
+  else runBackupImport();
+}
+
+// ---------------------------------------------------------------------------
 // Main menu
 // ---------------------------------------------------------------------------
 
@@ -4280,25 +5213,12 @@ static void runRecoveryMenu()
 
     switch(selected)
     {
-      case 0:
-        runBootModeMenu(false);
-        break;
-
-      case 1:
-        runBootModeMenu(true);
-        break;
-
-      case 2:
-        runFirmwareUpdate();
-        break;
-
-      case 3:
-        runErase();
-        break;
-
-      case 4:
-        runSettingsMenu();
-        break;
+      case 0: runBootModeMenu(false); break;
+      case 1: runBootModeMenu(true); break;
+      case 2: runFirmwareUpdate(); break;
+      case 3: runErase(); break;
+      case 4: runPartitionManager(); break;
+      case 5: runSettingsMenu(); break;
     }
 
     drawMenu(selected);
@@ -4448,6 +5368,7 @@ void setup()
   }
 
   gWebEnabled = loadWebEnabled();
+  loadWebAuth();
 
   if(WiFi.status() == WL_CONNECTED)
   {

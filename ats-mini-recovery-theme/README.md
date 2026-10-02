@@ -1,4 +1,4 @@
-# ATS Mini Boot Manager (theme) — v4.0.0 (DES)
+# ATS Mini Boot Manager (theme) — v4.1.0 (DES)
 
 SI4732 (ESP32-S3) 수신기용 **부트 매니저(리커버리)** 의 테마 버전입니다.
 전원을 켜면 부트 매니저가 먼저 실행되어 `app0` / `app1` 중 하나를 골라 부팅합니다.
@@ -32,6 +32,12 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저(리커버리)** 의 테마 버
 - **설정 격리 (DES)** — app0 / app1 은 코드에서 같은 `settings` 이름을 찾지만, 활성화된
   파티션 테이블에 따라 물리 영역(`0xF9D000` / `0xFBD000`)이 달라져 **두 앱의 설정이
   섞이지 않습니다**.
+- **Partition** — `Info`(파티션·사용량), `Repair`(정본 테이블 복구), `Resize`(app0/app1
+  경계를 0.5M 단위, 각 1.0~6.0M 로 이동, **양 슬롯이 비었을 때만**).
+- **설정 백업** — `Settings > Backup` 에서 슬롯 설정(`settings`)을 `.nvs` 파일로
+  내보내고(LittleFS) 다시 불러옵니다.
+- **파일 관리 · 웹 계정** — `Settings > LittleFS` 에서 파일 이름변경/삭제, 웹(Network 탭)의
+  계정(ID/PW)으로 웹 UI 를 보호.
 
 메뉴 구성:
 
@@ -41,7 +47,8 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저(리커버리)** 의 테마 버
 | App1 | Boot(기본) / Hold mode |
 | Firmware Update | 대상 슬롯 → 소스(Local / Network) → 파일 선택 → 플래시 |
 | Erase | 2단계: `Factory Reset`(App0 cfg / App1 cfg / Recovery) 또는 `Erase`(App0 / App1 / LittleFS). 클릭=체크, 길게=실행, 아무것도 안 고르고 길게=뒤로 |
-| Settings | WiFi / Brightness / About |
+| Partition | `Info` / `Resize` / `Repair`. Resize 는 app0/app1 이 **비어 있을 때만** |
+| Settings | Network / Brightness / LittleFS / Backup / About |
 
 ## 요구 사항
 
@@ -53,7 +60,7 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저(리커버리)** 의 테마 버
 
 ## 파티션 · 오프셋
 
-v4.0.0 은 **DES(Dual Environment System)** 파티션 테이블을 씁니다. `nvs` ~ `recovery`
+v4.1.0 은 **DES(Dual Environment System)** 파티션 테이블을 씁니다. `nvs` ~ `recovery`
 까지는 기존 v3.x 와 주소가 같고, `littlefs` 가 6MB → 5.58MB 로 줄면서 꼬리 영역에
 새 파티션이 들어갑니다.
 
@@ -102,36 +109,36 @@ uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 921600 read-flas
 | `ats-mini-partitions.bin` | `0x8000` | 파티션 테이블 |
 | `boot_app0.bin` | `0xe000` | otadata 초기화 (부팅 슬롯 초기값) |
 | `app0.bin` | `0x10000` | 앱 슬롯 0 (앱 슬롯 1은 `0x390000`) |
-| `ats-mini-recovery-4.0.0.bin` | `0x860000` | 부트 매니저 (이 릴리즈) |
+| `ats-mini-recovery-4.1.0.bin` | `0x860000` | 부트 매니저 (이 릴리즈) |
 
 전부 한 번에 올리기 (esptool):
 
 ```
-uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 write-flash 0x0 ats-mini-bootloader.bin 0x8000 ats-mini-partitions.bin 0xe000 boot_app0.bin 0x10000 app0.bin 0x860000 ats-mini-recovery-4.0.0.bin
+uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 write-flash 0x0 ats-mini-bootloader.bin 0x8000 ats-mini-partitions.bin 0xe000 boot_app0.bin 0x10000 app0.bin 0x860000 ats-mini-recovery-4.1.0.bin
 ```
 
 부트 매니저만 바꾸기 (v3.0.0 / v3.1.x / v3.2.1 에서 업그레이드 — 설정·앱 슬롯 유지):
 
 ```
-uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 --before default-reset --after hard-reset write-flash 0x860000 ats-mini-recovery-4.0.0.bin
+uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 --before default-reset --after hard-reset write-flash 0x860000 ats-mini-recovery-4.1.0.bin
 ```
 
 `flash-recovery.ps1` 를 쓰면 포트·리셋을 자동으로 처리합니다:
 
 ```powershell
-.\flash-recovery.ps1 -Offset 0x860000 -Image .\ats-mini-recovery-4.0.0.bin -Port COM7
+.\flash-recovery.ps1 -Offset 0x860000 -Image .\ats-mini-recovery-4.1.0.bin -Port COM7
 ```
 
 > 부트 매니저 자신은 실행 중인 슬롯을 덮어쓸 수 없으므로, 새 부트 매니저는 위처럼
 > `0x860000` 에 올립니다.
 
-### v3.2.1 → v4.0.0 업그레이드
+### v3.2.1 → v4.x 업그레이드
 
 파티션 테이블이 바뀌므로 **리커버리만 올리면 안 됩니다**. 새 테이블을 `0x8000` 에,
 ENV1 백업 테이블을 `0xFFF000` 에 올리고 리커버리를 `0x860000` 에 올립니다.
 
 ```
-uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 --before default-reset --after hard-reset write-flash 0x8000 ats-mini-partitions.bin 0xFFF000 ats-mini-partitions.bin 0x860000 ats-mini-recovery-4.0.0.bin
+uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 --before default-reset --after hard-reset write-flash 0x8000 ats-mini-partitions.bin 0xFFF000 ats-mini-partitions.bin 0x860000 ats-mini-recovery-4.1.0.bin
 ```
 
 `littlefs` 는 **첫 부팅에 리커버리가 알아서 처리**합니다. 줄어든 파티션보다 큰
@@ -164,10 +171,20 @@ Firmware Update → 대상 슬롯(App0/App1) → 소스 선택:
 파일을 고르고 확인하면 플래시가 시작됩니다. 진행 패널에 `파일명 -> App0` 처럼
 **무엇을 어디에** 쓰는지 표시됩니다.
 
-**2) 웹서버에서**
+**2) 웹 업로더로 (esptool 없이 · 권장)**
 
-WiFi 연결 후 브라우저로 `http://<IP>/` 접속 → `.bin` 업로드 → 슬롯(App0/App1)
-지정 → Flash.
+1. 기기에서 엔코더를 **길게 눌러 메뉴**로 들어갑니다. 웹서버가 켜지면 메뉴 하단 오른쪽에
+   **웹 주소(IP)** 가 표시됩니다 (예: `192.168.0.13`, AP 모드면 `192.168.4.1`).
+2. 폰/PC 를 같은 WiFi 에 연결합니다. WiFi 가 없으면 기기의 AP `ats-recovery` 에 접속
+   (비밀번호 `12345678`)합니다.
+3. 브라우저에서 표시된 주소를 엽니다: `http://192.168.0.13/`
+4. **Firmware** 탭 → 파일 선택(`.bin`) → 대상 선택 → **Upload**:
+   - `Upload & flash to App0` / `App1` — 업로드 후 그 슬롯으로 플래시하고 재부팅
+   - `Save to storage` — 플래시 없이 `.bin`/`.txt`/`.nvs` 를 내장메모리에 저장
+5. **진행 모달**이 뜨고 100%가 되면 자동으로 그 슬롯으로 재부팅됩니다.
+
+- 웹 계정(Network 탭 → **Web account**)을 켜 두면 접속 시 **ID/PW** 를 묻습니다.
+- Erase(초기화)는 **웹에서 할 수 없습니다** — LCD 에서만 가능합니다.
 
 **3) esptool 로 (PC에서)**
 
