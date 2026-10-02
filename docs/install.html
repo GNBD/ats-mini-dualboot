@@ -146,6 +146,12 @@
     transform:translate(-50%,-50%) rotateX(-90deg) translateZ(60px)}
   .chip3d .ctext b{display:block;font-size:15px;letter-spacing:-.02em;line-height:1.1}
   .chip3d .ctext span{display:block;margin-top:5px;font-size:8px;font-weight:600;color:#333;line-height:1.3}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+  @media(max-width:560px){.split{grid-template-columns:1fr}}
+  .pane{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--chip)}
+  .paneh{font-weight:700;font-size:13.5px;margin-bottom:6px}
+  .opt{color:var(--mut);font-weight:500;font-size:11px}
+  .picked{font-size:11.5px;color:var(--mut);min-height:1em;word-break:break-all;margin-top:2px}
 </style>
 <script>(function(){try{var t=localStorage.getItem("ats-theme");if(!t)t="light";document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 </head>
@@ -203,12 +209,19 @@
         <button class="btn" id="yes2" data-i18n="yes"></button>
         <button class="btn ghost" id="no2" data-i18n="no"></button>
       </div>
-      <div id="fwbox" style="display:none">
-        <input type="file" id="appfile" accept=".bin">
-        <input type="text" id="appurl" data-i18n-ph="urlph">
-        <label class="note"><span data-i18n="slot"></span>:
-          <select id="slot"><option value="0">App0</option><option value="1">App1</option></select>
-        </label>
+      <div id="fwbox" style="display:none" class="split">
+        <div class="pane">
+          <div class="paneh">App0</div>
+          <input type="file" id="app0file" accept=".bin">
+          <input type="text" id="app0url" data-i18n-ph="urlph">
+          <div class="picked" id="app0info"></div>
+        </div>
+        <div class="pane">
+          <div class="paneh">App1 <span class="opt" data-i18n="optional"></span></div>
+          <input type="file" id="app1file" accept=".bin">
+          <input type="text" id="app1url" data-i18n-ph="urlph">
+          <div class="picked" id="app1info"></div>
+        </div>
       </div>
       <div class="row right">
         <button class="btn ghost" id="back2" data-i18n="back"></button>
@@ -281,7 +294,7 @@ const I18N = {
     s1_h:"Boot Manager Flasher", s1_p:"Connect your ATS Mini over USB.",
     select:"Select device", next:"Next", back:"Back", chip:"Chip",
     s2_h:"Step 2 · Firmware (optional)", s2_p:"Pre-install an app firmware (OTA .bin) now?",
-    yes:"Yes, choose firmware", no:"No, skip", slot:"Slot", urlph:"…or paste a direct .bin URL",
+    yes:"Yes, choose firmware", no:"No, skip", optional:"optional", urlph:"…or paste a direct .bin URL",
     s3_h:"Step 3 · Terms & warnings", s3_p:"Please read carefully before continuing.",
     warn_h:"Warnings",
     warn_1:"Beta software — flashing can brick the device or erase data.",
@@ -307,7 +320,7 @@ const I18N = {
     s1_h:"Прошивальщик загрузчика", s1_p:"Подключите ATS Mini по USB.",
     select:"Выбрать устройство", next:"Далее", back:"Назад", chip:"Чип",
     s2_h:"Шаг 2 · Прошивка (необязательно)", s2_p:"Установить прошивку приложения (OTA .bin) сразу?",
-    yes:"Да, выбрать файл", no:"Нет, пропустить", slot:"Слот", urlph:"…или вставьте прямую ссылку на .bin",
+    yes:"Да, выбрать файл", no:"Нет, пропустить", optional:"необязательно", urlph:"…или вставьте прямую ссылку на .bin",
     s3_h:"Шаг 3 · Условия и предупреждения", s3_p:"Внимательно прочитайте перед продолжением.",
     warn_h:"Предупреждения",
     warn_1:"Бета-версия — прошивка может вывести устройство из строя или стереть данные.",
@@ -333,7 +346,7 @@ const I18N = {
     s1_h:"부트매니저 플래셔", s1_p:"ATS Mini를 USB로 연결하세요.",
     select:"장치 선택", next:"다음", back:"뒤로", chip:"칩",
     s2_h:"2단계 · 펌웨어 (선택)", s2_p:"앱 펌웨어(OTA .bin)를 미리 설치할까요?",
-    yes:"예, 파일 고르기", no:"아니오, 건너뛰기", slot:"슬롯", urlph:"…또는 .bin 직접 링크 붙여넣기",
+    yes:"예, 파일 고르기", no:"아니오, 건너뛰기", optional:"선택", urlph:"…또는 .bin 직접 링크 붙여넣기",
     s3_h:"3단계 · 약관 및 주의사항", s3_p:"계속하기 전에 꼭 읽어주세요.",
     warn_h:"주의사항",
     warn_1:"베타 소프트웨어 — 플래시가 기기를 벽돌로 만들거나 데이터를 지울 수 있습니다.",
@@ -485,17 +498,17 @@ async function runFlash(){
       log(n.name+"  "+data.length+" B  @ 0x"+n.addr.toString(16));
     }
     if(useApp){
-      const url=$("appurl").value.trim(), file=$("appfile").files[0];
-      if(url||file){
-        let raw,name;
+      for(const [id,addr,nm] of [["app0",0x10000,"App0"],["app1",0x390000,"App1"]]){
+        const url=($(id+"url").value||"").trim(), file=$(id+"file").files[0];
+        if(!url && !file) continue;
+        let raw,fn;
         if(url){ const r=await fetch(url); if(!r.ok) throw new Error("HTTP "+r.status);
-          raw=new Uint8Array(await r.arrayBuffer()); name=url.split("/").pop()||url; }
-        else { raw=new Uint8Array(await file.arrayBuffer()); name=file.name; }
+          raw=new Uint8Array(await r.arrayBuffer()); fn=url.split("/").pop()||url; }
+        else { raw=new Uint8Array(await file.arrayBuffer()); fn=file.name; }
         const ex=extractAppImage(raw);
-        if(ex.merged) log("merged image -> app only ("+raw.length+" -> "+ex.data.length+" B)");
-        const addr=($("slot").value==="1")?0x390000:0x10000;
+        if(ex.merged) log(nm+": merged image -> app only ("+raw.length+" -> "+ex.data.length+" B)");
         fa.push({data:ex.data, address:addr});
-        log("app "+name+"  "+ex.data.length+" B  @ 0x"+addr.toString(16));
+        log(nm+" "+fn+"  "+ex.data.length+" B  @ 0x"+addr.toString(16));
       }
     }
     const total=fa.reduce((s,f)=>s+f.data.length,0);
@@ -524,7 +537,16 @@ $("next1").onclick=()=>show(2);
 $("back2").onclick=()=>show(1);
 $("yes2").onclick=()=>{ useApp=true; $("fwbox").style.display="block"; };
 $("no2").onclick=()=>{ useApp=false; $("fwbox").style.display="none"; show(3); };
-$("next2").onclick=()=>{ if(useApp && !$("appurl").value.trim() && !$("appfile").files[0]){ status(T("pickfile")); return; } show(3); };
+$("next2").onclick=()=>{
+  if(useApp){
+    const any=$("app0url").value.trim()||$("app0file").files[0]||$("app1url").value.trim()||$("app1file").files[0];
+    if(!any){ status(T("pickfile")); return; }
+  }
+  show(3);
+};
+["app0","app1"].forEach(id=>{
+  $(id+"file").onchange=()=>{ const f=$(id+"file").files[0]; $(id+"info").textContent=f?f.name:""; };
+});
 $("back3").onclick=()=>show(2);
 const chk=()=>{ $("next3").disabled=!($("ag1").checked && $("ag2").checked); };
 $("ag1").onchange=chk; $("ag2").onchange=chk;
