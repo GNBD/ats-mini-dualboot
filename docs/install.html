@@ -120,6 +120,8 @@
   .modal.on{display:flex}
   .mbox{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;max-width:410px;width:100%;
     box-shadow:0 24px 60px rgba(0,0,0,.4);animation:pop .3s cubic-bezier(.2,.7,.2,1)}
+  .donebadge{width:58px;height:58px;margin:0 auto 12px;border-radius:50%;background:var(--accent);color:var(--accent-fg);
+    display:grid;place-items:center;font-size:30px;animation:pop .45s cubic-bezier(.2,.7,.2,1)}
   .spin{width:16px;height:16px;border:2px solid var(--mut);border-top-color:var(--accent);border-radius:50%;
     display:inline-block;animation:spin3 .8s linear infinite;vertical-align:-3px}
 
@@ -283,6 +285,13 @@
   </div>
 </div></div>
 
+<div class="modal" id="dmodal"><div class="mbox" style="text-align:center">
+  <div class="donebadge">✓</div>
+  <h3 id="d_h" style="font-size:19px;text-transform:none;letter-spacing:-.01em;color:var(--fg);margin:0 0 6px"></h3>
+  <p id="d_p" class="note"></p>
+  <div class="row" style="justify-content:center;margin-bottom:0"><button class="btn" id="d_ok" data-i18n="ok"></button></div>
+</div></div>
+
 <script type="module">
 import { ESPLoader, Transport } from "https://unpkg.com/esptool-js/bundle.js";
 
@@ -309,6 +318,7 @@ const I18N = {
     cf_erase:"Erase ALL flash and write? This wipes settings and apps.",
     connecting:"Connecting…", fetching:"Fetching files…", writing:"Flashing…",
     done:"Done. Reset the board to start.", err:"Error",
+    done_h:"Done!", done_p:"The board was flashed. It starts on reset.", ok:"OK",
     notserial:"Could not open the device port.",
     pickfile:"Choose a firmware file, or press No to skip.",
     lic_fail:"Could not load the license text. See github.com/GNBD/ats-mini-dualboot"
@@ -335,6 +345,7 @@ const I18N = {
     cf_erase:"Стереть ВСЮ flash и записать? Настройки и приложения будут удалены.",
     connecting:"Подключение…", fetching:"Загрузка файлов…", writing:"Прошивка…",
     done:"Готово. Перезагрузите плату.", err:"Ошибка",
+    done_h:"Готово!", done_p:"Прошивка записана. Плата запустится после перезагрузки.", ok:"ОК",
     notserial:"Не удалось открыть порт устройства.",
     pickfile:"Выберите файл прошивки или нажмите «Нет».",
     lic_fail:"Не удалось загрузить текст лицензии. См. github.com/GNBD/ats-mini-dualboot"
@@ -361,6 +372,7 @@ const I18N = {
     cf_erase:"전체 플래시를 지우고 쓸까요? 설정과 앱이 모두 지워집니다.",
     connecting:"연결 중…", fetching:"파일 받는 중…", writing:"플래시 중…",
     done:"완료. 기기를 리셋하세요.", err:"오류",
+    done_h:"완료!", done_p:"플래시가 끝났습니다. 리셋하면 시작됩니다.", ok:"확인",
     notserial:"장치 포트를 열 수 없습니다.",
     pickfile:"펌웨어 파일을 고르거나 ‘아니오’로 건너뛰세요.",
     lic_fail:"라이선스 텍스트를 불러오지 못했습니다. github.com/GNBD/ats-mini-dualboot"
@@ -534,7 +546,7 @@ async function runFlash(){
       reportProgress:(i,w)=>{ const p=Math.round((base[i]+w)/total*100); bar(p); status(T("writing")+" "+p+"%"); }
     });
     await loader.after("hard_reset");
-    bar(100); status(T("done")); log(T("done"));
+    bar(100); status(T("done")); log(T("done")); showDone();
   }catch(e){ status(T("err")+": "+e.message); log("ERROR: "+e.message); }
   finally{ busy=false; $("flash").disabled=false; }
 }
@@ -545,6 +557,7 @@ function confirmThen(){
   $("modal").classList.add("on");
 }
 function closeModal(){ $("modal").classList.remove("on"); }
+function showDone(){ $("d_h").textContent=T("done_h"); $("d_p").textContent=T("done_p"); $("dmodal").classList.add("on"); }
 
 $("select").onclick=async()=>{ try{ await connect(); $("next1").disabled=false; } catch(e){ status(T("err")+": "+e.message); } };
 $("next1").onclick=()=>show(2);
@@ -569,6 +582,7 @@ $("back4").onclick=()=>show(3);
 $("flash").onclick=confirmThen;
 $("m_no").onclick=closeModal;
 $("m_yes").onclick=()=>{ closeModal(); runFlash(); };
+$("d_ok").onclick=()=>$("dmodal").classList.remove("on");
 
 (function(){
   let l=null; try{l=localStorage.getItem("ats-inst-lang");}catch(e){}
