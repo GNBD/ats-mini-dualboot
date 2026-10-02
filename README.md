@@ -13,7 +13,8 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저** 저장소입니다. 전원�
                                   └> app1  (펌웨어 B)
 ```
 
-<img width="657" height="350" alt="Boot manager" src="https://github.com/user-attachments/assets/a04bad85-3edb-43bd-9c66-b7643d7b9e33" />
+<img width="1946" height="1460" alt="image" src="https://github.com/user-attachments/assets/e5e5ebd1-ed1d-4ee5-818b-28977e2ce1bc" />
+
 
 ## 한눈에 보기
 
