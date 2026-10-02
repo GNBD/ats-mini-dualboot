@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATS Mini Boot Manager — Web Installer</title>
+<title>Boot Manager Flasher — GNBD</title>
 <style>
   :root{
     --bg:#ffffff; --fg:#0a0a0a; --mut:#737373; --card:#ffffff; --line:#e5e5e5;
@@ -32,8 +32,6 @@
 
   header{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:22px}
   .brand{display:flex;align-items:center;gap:12px}
-  .logo{width:40px;height:40px;border-radius:12px;border:1.5px solid var(--fg);display:grid;place-items:center;
-    font-size:18px;font-weight:800;letter-spacing:-1px;animation:spin3 8s linear infinite}
   @keyframes spin3{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
   h1{font-size:19px;margin:0;letter-spacing:-.02em}
   .sub{color:var(--mut);font-size:12.5px;margin:2px 0 0}
@@ -124,15 +122,38 @@
     box-shadow:0 24px 60px rgba(0,0,0,.4);animation:pop .3s cubic-bezier(.2,.7,.2,1)}
   .spin{width:16px;height:16px;border:2px solid var(--mut);border-top-color:var(--accent);border-radius:50%;
     display:inline-block;animation:spin3 .8s linear infinite;vertical-align:-3px}
+
+  /* 3D silver chip */
+  .scene{perspective:820px;height:170px;margin:6px auto;display:grid;place-items:center;
+    filter:drop-shadow(0 14px 30px color-mix(in srgb,var(--fg) 22%,transparent))}
+  .chip3d{position:relative;width:120px;height:120px;transform-style:preserve-3d;animation:spin3d 9s linear infinite}
+  @keyframes spin3d{from{transform:rotateX(-16deg) rotateY(0)}to{transform:rotateX(-16deg) rotateY(360deg)}}
+  .chip3d .cfront,.chip3d .cback{position:absolute;left:50%;top:50%;width:120px;height:120px;border-radius:12px;
+    border:1px solid #9a9a9a}
+  .chip3d .cfront{transform:translate(-50%,-50%) translateZ(9px);
+    background:linear-gradient(150deg,#f4f4f4,#c6c6c6 60%,#aaaaaa);color:#141414;
+    box-shadow:inset 0 1px 0 #fff,inset 0 -3px 8px rgba(0,0,0,.22);
+    display:grid;place-items:center;padding:12px;text-align:center}
+  .chip3d .cback{transform:translate(-50%,-50%) rotateY(180deg) translateZ(9px);
+    background:linear-gradient(150deg,#d2d2d2,#9c9c9c)}
+  .chip3d .cside{position:absolute;left:50%;top:50%;border:1px solid #5a5a5a;
+    background:repeating-linear-gradient(180deg,#5f5f5f 0 3px,#3d3d3d 3px 6px)}
+  .chip3d .cside.r{width:18px;height:120px;transform:translate(-50%,-50%) rotateY(90deg) translateZ(60px)}
+  .chip3d .cside.l{width:18px;height:120px;transform:translate(-50%,-50%) rotateY(-90deg) translateZ(60px)}
+  .chip3d .cside.t{width:120px;height:18px;background:repeating-linear-gradient(90deg,#5f5f5f 0 3px,#3d3d3d 3px 6px);
+    transform:translate(-50%,-50%) rotateX(90deg) translateZ(60px)}
+  .chip3d .cside.b{width:120px;height:18px;background:repeating-linear-gradient(90deg,#5f5f5f 0 3px,#3d3d3d 3px 6px);
+    transform:translate(-50%,-50%) rotateX(-90deg) translateZ(60px)}
+  .chip3d .ctext b{display:block;font-size:15px;letter-spacing:-.02em;line-height:1.1}
+  .chip3d .ctext span{display:block;margin-top:5px;font-size:8px;font-weight:600;color:#333;line-height:1.3}
 </style>
-<script>(function(){try{var t=localStorage.getItem("ats-theme");if(!t)t=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+<script>(function(){try{var t=localStorage.getItem("ats-theme");if(!t)t="light";document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 </head>
 <body>
 <div class="bgfx"></div>
 <div class="wrap">
   <header>
     <div class="brand">
-      <div class="logo">▚</div>
       <div><h1 data-i18n="title"></h1><p class="sub" data-i18n="sub"></p></div>
     </div>
     <div class="top">
@@ -159,6 +180,14 @@
         <p class="big" data-i18n="s1_h"></p>
         <p class="note" data-i18n="s1_p"></p>
         <div class="connect" id="conn"><span class="glyph">⌁</span></div>
+        <div class="scene" id="board3d" style="display:none">
+          <div class="chip3d">
+            <div class="cfront"><div class="ctext" id="chiptext"><b>ESP32-S3</b></div></div>
+            <div class="cback"></div>
+            <div class="cside r"></div><div class="cside l"></div>
+            <div class="cside t"></div><div class="cside b"></div>
+          </div>
+        </div>
         <button class="btn" id="select" data-i18n="select"></button>
       </div>
       <div id="chipinfo" class="note" style="text-align:center"></div>
@@ -229,7 +258,7 @@
     </div>
   </section>
 
-  <footer><span data-i18n="supports"></span></footer>
+  <footer><span data-i18n="supports"></span><br>by GNBD · <a href="https://github.com/GNBD/ats-mini-dualboot" target="_blank" rel="noopener">github.com/GNBD/ats-mini-dualboot</a></footer>
 </div>
 
 <div class="modal" id="modal"><div class="mbox">
@@ -246,10 +275,10 @@ import { ESPLoader, Transport } from "https://unpkg.com/esptool-js/bundle.js";
 
 const I18N = {
   en:{
-    title:"ATS Mini Boot Manager", sub:"Web Installer",
+    title:"Boot Manager Flasher", sub:"Web flasher · by GNBD",
     supports:"This flasher supports: v4.1.0 (DES)",
     st1:"Device",st2:"Firmware",st3:"Terms",st4:"Flash",
-    s1_h:"Easy Bootloader Flasher", s1_p:"Connect your ATS Mini over USB.",
+    s1_h:"Boot Manager Flasher", s1_p:"Connect your ATS Mini over USB.",
     select:"Select device", next:"Next", back:"Back", chip:"Chip",
     s2_h:"Step 2 · Firmware (optional)", s2_p:"Pre-install an app firmware (OTA .bin) now?",
     yes:"Yes, choose firmware", no:"No, skip", slot:"Slot", urlph:"…or paste a direct .bin URL",
@@ -272,10 +301,10 @@ const I18N = {
     lic_fail:"Could not load the license text. See github.com/GNBD/ats-mini-dualboot"
   },
   ru:{
-    title:"ATS Mini Boot Manager", sub:"Веб-установщик",
+    title:"Прошивальщик загрузчика", sub:"Веб-прошивальщик · от GNBD",
     supports:"Этот установщик поддерживает: v4.1.0 (DES)",
     st1:"Устройство",st2:"Прошивка",st3:"Условия",st4:"Прошивка",
-    s1_h:"Простой прошивальщик загрузчика", s1_p:"Подключите ATS Mini по USB.",
+    s1_h:"Прошивальщик загрузчика", s1_p:"Подключите ATS Mini по USB.",
     select:"Выбрать устройство", next:"Далее", back:"Назад", chip:"Чип",
     s2_h:"Шаг 2 · Прошивка (необязательно)", s2_p:"Установить прошивку приложения (OTA .bin) сразу?",
     yes:"Да, выбрать файл", no:"Нет, пропустить", slot:"Слот", urlph:"…или вставьте прямую ссылку на .bin",
@@ -298,10 +327,10 @@ const I18N = {
     lic_fail:"Не удалось загрузить текст лицензии. См. github.com/GNBD/ats-mini-dualboot"
   },
   ko:{
-    title:"ATS Mini Boot Manager", sub:"웹 설치기",
+    title:"부트매니저 플래셔", sub:"웹 플래셔 · by GNBD",
     supports:"이 플래셔 지원 버전: v4.1.0 (DES)",
     st1:"장치",st2:"펌웨어",st3:"약관",st4:"플래시",
-    s1_h:"이지 부트로더 플래셔", s1_p:"ATS Mini를 USB로 연결하세요.",
+    s1_h:"부트매니저 플래셔", s1_p:"ATS Mini를 USB로 연결하세요.",
     select:"장치 선택", next:"다음", back:"뒤로", chip:"칩",
     s2_h:"2단계 · 펌웨어 (선택)", s2_p:"앱 펌웨어(OTA .bin)를 미리 설치할까요?",
     yes:"예, 파일 고르기", no:"아니오, 건너뛰기", slot:"슬롯", urlph:"…또는 .bin 직접 링크 붙여넣기",
@@ -366,6 +395,43 @@ const NEED=[
   {name:"ats-mini-partitions-v4.bin", local:"firmware/ats-mini-partitions-v4.bin", addr:0x8000},
   {name:"ats-mini-recovery-4.1.0.bin", local:"firmware/ats-mini-recovery-4.1.0.bin", addr:0x860000},
 ];
+
+// A merged (full) image carries a partition table at 0x8000; extract just the
+// first app image from it so it can go into a slot, exactly like the firmware.
+function findFirstAppOffset(d){
+  if(d.length < 0x8000+32) return 0;
+  for(let i=0;i<95;i++){
+    const o=0x8000+i*32;
+    if(o+32>d.length) break;
+    if(d[o]!==0xAA || d[o+1]!==0x50) break;
+    const type=d[o+2], sub=d[o+3];
+    const addr=d[o+4]|(d[o+5]<<8)|(d[o+6]<<16)|(d[o+7]<<24);
+    if(type===0 && sub>=0x10 && sub<=0x1F) return addr;
+  }
+  return 0;
+}
+function computeAppImageSize(d, off){
+  if(off+24 > d.length || d[off]!==0xE9) return 0;
+  const seg=d[off+1];
+  let pos=24;
+  for(let i=0;i<seg;i++){
+    if(off+pos+8 > d.length) return 0;
+    const dlen=d[off+pos+4]|(d[off+pos+5]<<8)|(d[off+pos+6]<<16)|(d[off+pos+7]<<24);
+    pos += 8 + dlen;
+    if(off+pos > d.length) return 0;
+  }
+  pos += 1; if(pos%16) pos += 16-(pos%16);
+  if(d[off+23]===1) pos += 32;
+  return pos;
+}
+function extractAppImage(raw){
+  if(raw.length > 0x8002 && raw[0]===0xE9 && raw[0x8000]===0xAA && raw[0x8001]===0x50){
+    const off=findFirstAppOffset(raw);
+    const sz=off?computeAppImageSize(raw,off):0;
+    if(off && sz && sz<=raw.length) return {data:raw.slice(off,off+sz), merged:true};
+  }
+  return {data:raw, merged:false};
+}
 let transport=null, loader=null, busy=false, useApp=false, licLoaded=false;
 
 async function connect(){
@@ -377,10 +443,16 @@ async function connect(){
   loader=new ESPLoader({transport,baudrate:460800,
     terminal:{clean(){logEl.textContent="";},writeLine(d){log(d);},write(d){logEl.textContent+=d;}}});
   const chip=await loader.main();
-  $("conn").classList.remove("busy"); $("conn").classList.add("ok");
-  $("conn").querySelector(".glyph").textContent="✓";
+  $("conn").classList.remove("busy");
+  $("conn").style.display="none";
+  $("board3d").style.display="grid";
+  const esc=s=>String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const i=chip.indexOf("(");
+  $("chiptext").innerHTML = i>0
+    ? "<b>"+esc(chip.slice(0,i).trim())+"</b><span>"+esc(chip.slice(i).trim())+"</span>"
+    : "<b>"+esc(chip.trim())+"</b>";
+  $("chipinfo").textContent="";
   log(T("chip")+": "+chip);
-  $("chipinfo").textContent=chip;
   return loader;
 }
 
@@ -415,13 +487,15 @@ async function runFlash(){
     if(useApp){
       const url=$("appurl").value.trim(), file=$("appfile").files[0];
       if(url||file){
-        let data,name;
+        let raw,name;
         if(url){ const r=await fetch(url); if(!r.ok) throw new Error("HTTP "+r.status);
-          data=new Uint8Array(await r.arrayBuffer()); name=url.split("/").pop()||url; }
-        else { data=new Uint8Array(await file.arrayBuffer()); name=file.name; }
+          raw=new Uint8Array(await r.arrayBuffer()); name=url.split("/").pop()||url; }
+        else { raw=new Uint8Array(await file.arrayBuffer()); name=file.name; }
+        const ex=extractAppImage(raw);
+        if(ex.merged) log("merged image -> app only ("+raw.length+" -> "+ex.data.length+" B)");
         const addr=($("slot").value==="1")?0x390000:0x10000;
-        fa.push({data, address:addr});
-        log("app "+name+"  "+data.length+" B  @ 0x"+addr.toString(16));
+        fa.push({data:ex.data, address:addr});
+        log("app "+name+"  "+ex.data.length+" B  @ 0x"+addr.toString(16));
       }
     }
     const total=fa.reduce((s,f)=>s+f.data.length,0);
