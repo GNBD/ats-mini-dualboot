@@ -76,7 +76,7 @@ static constexpr const lgfx::IFont* FONT_TINY  = &lgfx::fonts::Font0;
 #define COL_KEY     RGB(7, 14, 7)     // keyboard key face
 #define COL_KEYSEL  RGB(20, 44, 17)   // keyboard selected key (same as COL_ACC)
 
-#define RECOVERY_VERSION "4.1.0"
+#define RECOVERY_VERSION "4.1.1"
 
 // Default: fetch this .txt (one URL per line). Local /update_url.txt and
 // DEFAULT_UPDATE_URLS are fallbacks when the remote list is unavailable.
@@ -135,12 +135,13 @@ static const char *menu[] = {
 // Tiles that fit one page of the main menu (a 3x2 grid).
 #define MENU_PAGE_TILES 6
 
-// Settings > ...  (Network / Brightness / LittleFS / Backup / About)
+// Settings > ...  (Network / Brightness / LittleFS / Backup / Guide / About)
 static const char *settingsMenu[] = {
   "Network",
   "Brightness",
   "LittleFS",
   "Backup",
+  "Guide",
   "About"
 };
 #define SETTINGS_COUNT (sizeof(settingsMenu) / sizeof(settingsMenu[0]))
@@ -1806,15 +1807,16 @@ static void drawWifiMenu(int selected)
 static void drawSettingsMenu(int selected)
 {
   static const int icons[SETTINGS_COUNT] =
-    {ICON_WIFI, ICON_BRIGHT, ICON_FOLDER, ICON_DB, ICON_ABOUT};
+    {ICON_WIFI, ICON_BRIGHT, ICON_FOLDER, ICON_DB, ICON_BOOT, ICON_ABOUT};
   static const uint16_t accs[SETTINGS_COUNT] =
-    {COL_ACC, COL_OK, COL_GOLD, COL_OK, COL_ACC};
+    {COL_ACC, COL_OK, COL_GOLD, COL_OK, COL_GOLD, COL_ACC};
 
   static const char *hints[SETTINGS_COUNT] = {
     "Connect to a network",
     "LCD backlight level",
     "Rename or delete files",
     "Save or load app cfg",
+    "Encoder & firmware guide",
     "Version, licenses, QR"
   };
 
@@ -1902,6 +1904,7 @@ static void runSettingsMenu()
     else if(selected == 1) runBrightness();
     else if(selected == 2) runLittleFsManager();
     else if(selected == 3) runBackupMenu();
+    else if(selected == 4) runTutorial();
     else runAbout();
 
     drawSettingsMenu(selected);
@@ -4465,6 +4468,112 @@ static void drawAboutPage(int page)
   gSprite.pushSprite(0, 0);
 }
 
+// ---------------------------------------------------------------------------
+// First-run guide (shown once, replay from Settings > Guide)
+// ---------------------------------------------------------------------------
+
+// The guide is a coach-mark overlay drawn on top of the real main menu, so the
+// user learns from the actual screens. tile = menu tile to highlight (-1 = none).
+struct CoachStep
+{
+  int tile;
+  const char *l1;
+  const char *l2;
+};
+
+static const CoachStep kCoach[] = {
+  {0, "BOOT APP0 / APP1", "your two firmware slots"},
+  {2, "FIRMWARE UPDATE", "install firmware into a slot"},
+  {3, "ERASE", "wipes settings, apps or files"},
+  {5, "SETTINGS", "WiFi, files, backup, guide"},
+  {-1, "CONTROLS", "rotate=move  hold=open  click=back"},
+  {-1, "OPEN THIS MENU", "hold the knob at power-on"},
+  {-1, "WEB", "open the IP below in a browser"}
+};
+#define COACH_STEPS ((int)(sizeof(kCoach) / sizeof(kCoach[0])))
+
+static bool tutorialSeen()
+{
+  if(!prefs.begin("bootcfg", true, STORAGE_PARTITION)) return false;
+  bool v = prefs.getBool("seen", false);
+  prefs.end();
+  return v;
+}
+
+static void markTutorialSeen()
+{
+  if(!prefs.begin("bootcfg", false, STORAGE_PARTITION)) return;
+  prefs.putBool("seen", true);
+  prefs.end();
+}
+
+static void drawCoach(int step)
+{
+  drawMenu(0);                                       // the real menu
+
+  gSprite.fillRectAlpha(0, 0, SCR_W, SCR_H, 150, 0x0000);   // dim
+
+  int idx = kCoach[step].tile;
+  if(idx >= 0)
+  {
+    int x0, y0, w, h, dx, dy, cols;
+    tileGeom(MENU_PAGE_TILES, x0, y0, w, h, dx, dy, cols);
+    int tx = x0 + (idx % cols) * dx;
+    int ty = y0 + (idx / cols) * dy;
+    for(int k = 0; k < 3; k++)
+      gSprite.drawRoundRect(tx - k, ty - k, w + 2 * k, h + 2 * k, 7, COL_GOLD);
+  }
+
+  const int bw = 304, bh = 46, bx = (SCR_W - bw) / 2, by = 100;
+  uiPanel(bx, by, bw, bh, COL_ACC);
+  gSprite.setTextDatum(TC_DATUM);
+  gSprite.setTextColor(COL_GOLD, COL_PANEL);
+  gSprite.drawString(kCoach[step].l1, 160, by + 7, FONT_SMALL);
+  gSprite.setTextColor(COL_TEXT, COL_PANEL);
+  gSprite.drawString(kCoach[step].l2, 160, by + 27, FONT_TINY);
+  gSprite.setTextDatum(TL_DATUM);
+
+  char pg[24];
+  snprintf(pg, sizeof(pg), "GUIDE %d/%d", step + 1, COACH_STEPS);
+  uiHintBar(pg, "TURN=NEXT  CLICK=SKIP");
+  gSprite.pushSprite(0, 0);
+}
+
+static void runTutorial()
+{
+  int step = 0;
+  drawCoach(step);
+  Serial.println("tutorial: show");
+
+  // Let the rails settle and drop any encoder counts or button state picked up
+  // during boot, so reset noise cannot skip the guide by itself.
+  uint32_t t0 = millis();
+  while(millis() - t0 < 600) delay(10);
+  (void)readEncoder();
+  while(readButton() > 0) delay(5);
+
+  while(true)
+  {
+    int8_t d = readEncoder();
+    if(d)
+    {
+      step += (d > 0) ? 1 : -1;
+      if(step >= COACH_STEPS) break;
+      if(step < 0) step = 0;
+      drawCoach(step);
+      continue;
+    }
+
+    uint32_t h = readButton();
+    if(h >= 300) { step++; if(step >= COACH_STEPS) break; drawCoach(step); continue; }  // hold = next
+    if(h > 0) break;                       // click = skip
+    delay(10);
+  }
+
+  markTutorialSeen();
+  Serial.println("tutorial: done");
+}
+
 static void runAbout()
 {
   int page = 0;
@@ -5320,6 +5429,9 @@ void setup()
   // menu path and the auto boot path both run this, because the applications
   // are the ones that would lose their settings.
   nvsUpgradeCheck();
+
+  // Show the guide once, before the first auto boot.
+  if(!tutorialSeen()) runTutorial();
 
   if(!encoderPressed)
   {

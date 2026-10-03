@@ -1,4 +1,4 @@
-# ATS Mini Boot Manager (theme) — v4.1.0 (DES)
+# ATS Mini Boot Manager (theme) — v4.1.1 (DES)
 
 SI4732 (ESP32-S3) 수신기용 **부트 매니저(리커버리)** 의 테마 버전입니다.
 전원을 켜면 부트 매니저가 먼저 실행되어 `app0` / `app1` 중 하나를 골라 부팅합니다.
@@ -49,7 +49,7 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저(리커버리)** 의 테마 버
 | Firmware Update | 대상 슬롯 → 소스(Local / Network) → 파일 선택 → 플래시 |
 | Erase | 2단계: `Factory Reset`(App0 cfg / App1 cfg / Recovery) 또는 `Erase`(App0 / App1 / LittleFS). 클릭=체크, 길게=실행, 아무것도 안 고르고 길게=뒤로 |
 | Partition | `Info` / `Resize` / `Repair`. Resize 는 app0/app1 이 **비어 있을 때만** |
-| Settings | Network / Brightness / LittleFS / Backup / About |
+| Settings | Network / Brightness / LittleFS / Backup / Guide / About |
 
 ## 요구 사항
 

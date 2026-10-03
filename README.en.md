@@ -18,7 +18,7 @@ power on ─> boot manager (recovery) ─> app0  (firmware A)
 ### **<https://gnbd.github.io/ats-mini-dualboot/install.html>**
 
 Open in Chrome/Edge → **Connect device** → (optional) app0/app1 firmware → accept the terms → **Flash!**
-Flashes the boot manager (recovery) and app firmware **right from the browser**. (v4.1.0 DES; merged images are trimmed to the app automatically.)
+Flashes the boot manager (recovery) and app firmware **right from the browser**. (v4.1.1 DES; merged images are trimmed to the app automatically.)
 
 ---
 

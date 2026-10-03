@@ -1,8 +1,8 @@
 {
-  "version": "v4.1.0 (DES)",
+  "version": "v4.1.1 (DES)",
   "files": [
     { "name": "ats-mini-bootloader-v4.bin",    "offset": 0 },
     { "name": "ats-mini-partitions-v4.bin",    "offset": 32768 },
-    { "name": "ats-mini-recovery-4.1.0.bin",   "offset": 8781824 }
+    { "name": "ats-mini-recovery-4.1.1.bin",   "offset": 8781824 }
   ]
 }
