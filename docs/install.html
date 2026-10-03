@@ -169,6 +169,8 @@
         <button data-lang="en">English</button>
         <button data-lang="ru">Русский</button>
         <button data-lang="ko">한국어</button>
+        <button data-lang="zh">中文</button>
+        <button data-lang="ja">日本語</button>
       </div>
       <button class="iconbtn" id="theme" aria-label="Theme">◐</button>
     </div>
@@ -273,7 +275,7 @@
     </div>
   </section>
 
-  <footer><span data-i18n="supports"></span> <b id="fver">v4.1.0 (DES)</b><br>by GNBD · <a href="https://github.com/GNBD/ats-mini-dualboot" target="_blank" rel="noopener">github.com/GNBD/ats-mini-dualboot</a></footer>
+  <footer><span data-i18n="supports"></span> <b id="fver">v4.1.1 (DES)</b><br>by GNBD · <a href="https://github.com/GNBD/ats-mini-dualboot" target="_blank" rel="noopener">github.com/GNBD/ats-mini-dualboot</a></footer>
 </div>
 
 <div class="modal" id="modal"><div class="mbox">
@@ -376,6 +378,60 @@ const I18N = {
     notserial:"장치 포트를 열 수 없습니다.",
     pickfile:"펌웨어 파일을 고르거나 ‘아니오’로 건너뛰세요.",
     lic_fail:"라이선스 텍스트를 불러오지 못했습니다. github.com/GNBD/ats-mini-dualboot"
+  },
+  zh:{
+    title:"引导加载器刷写器", sub:"网页刷写器 · by GNBD",
+    supports:"此刷写器支持：",
+    st1:"设备",st2:"固件",st3:"条款",st4:"刷写",
+    s1_h:"引导加载器刷写器", s1_p:"通过 USB 连接你的 ATS Mini。",
+    select:"选择设备", next:"下一步", back:"返回", chip:"芯片",
+    s2_h:"第 2 步 · 固件（可选）", s2_p:"现在预装应用固件（OTA .bin）吗？",
+    yes:"是，选择固件", no:"否，跳过", optional:"可选", urlph:"…或粘贴 .bin 直链",
+    s3_h:"第 3 步 · 条款与警告", s3_p:"继续前请仔细阅读。",
+    warn_h:"警告",
+    warn_1:"测试版软件 — 刷写可能使设备变砖或清除数据。",
+    warn_2:"仅支持 16MB（N16R8）板卡。请先备份。",
+    warn_3:"刷写过程中请勿拔掉 USB 或断电。",
+    lic_h:"许可证", agree1:"我已阅读并同意许可证和条款。",
+    agree2:"我理解风险，并知道设备数据可能被清除。",
+    s4_h:"第 4 步 · 刷写", s4_p:"按下“刷写！”。终端会显示进度。",
+    erase_chk:"写入前擦除全部 flash（NAND erase）", erase_hint:"擦除整个芯片，包括设置和应用。",
+    flash:"刷写！", term_h:"终端",
+    cf_yes:"继续", cf_no:"取消", cf_p:"现在写入已连接的板卡吗？",
+    cf_erase:"擦除全部 flash 并写入？这将清除设置和应用。",
+    connecting:"连接中…", fetching:"正在获取文件…", writing:"刷写中…",
+    done:"完成。重启板卡即可。", err:"错误",
+    done_h:"完成！", done_p:"板卡已刷写。重启后即可启动。", ok:"确定",
+    notserial:"无法打开设备端口。",
+    pickfile:"请选择固件文件，或按“否”跳过。",
+    lic_fail:"无法加载许可证文本。请见 github.com/GNBD/ats-mini-dualboot"
+  },
+  ja:{
+    title:"ブートマネージャー書き込みツール", sub:"Web書き込みツール · by GNBD",
+    supports:"対応:",
+    st1:"デバイス",st2:"ファームウェア",st3:"規約",st4:"書き込み",
+    s1_h:"ブートマネージャー書き込みツール", s1_p:"ATS Mini を USB で接続してください。",
+    select:"デバイスを選択", next:"次へ", back:"戻る", chip:"チップ",
+    s2_h:"ステップ2 · ファームウェア（任意）", s2_p:"アプリのファームウェア（OTA .bin）を先に書き込みますか？",
+    yes:"はい、ファイルを選ぶ", no:"いいえ、スキップ", optional:"任意", urlph:"…または .bin の直リンクを貼り付け",
+    s3_h:"ステップ3 · 規約と警告", s3_p:"続行する前によくお読みください。",
+    warn_h:"警告",
+    warn_1:"ベータ版 — 書き込みでデバイスが起動不能になったり、データが消える可能性があります。",
+    warn_2:"16MB（N16R8）基板専用です。先にバックアップしてください。",
+    warn_3:"書き込み中は USB を抜いたり電源を切ったりしないでください。",
+    lic_h:"ライセンス", agree1:"ライセンスと規約を読み、同意します。",
+    agree2:"リスクと、デバイスのデータが消える可能性を理解しました。",
+    s4_h:"ステップ4 · 書き込み", s4_p:"「書き込み！」を押してください。進行状況はターミナルに表示されます。",
+    erase_chk:"書き込み前に全 flash を消去（NAND erase）", erase_hint:"設定とアプリを含むチップ全体を消去します。",
+    flash:"書き込み！", term_h:"ターミナル",
+    cf_yes:"続行", cf_no:"キャンセル", cf_p:"接続中の基板に今すぐ書き込みますか？",
+    cf_erase:"全 flash を消去して書き込みますか？設定とアプリが消去されます。",
+    connecting:"接続中…", fetching:"ファイルを取得中…", writing:"書き込み中…",
+    done:"完了。基板をリセットしてください。", err:"エラー",
+    done_h:"完了！", done_p:"書き込みが完了しました。リセットで起動します。", ok:"OK",
+    notserial:"デバイスのポートを開けませんでした。",
+    pickfile:"ファームウェアファイルを選ぶか、「いいえ」でスキップしてください。",
+    lic_fail:"ライセンス本文を読み込めませんでした。github.com/GNBD/ats-mini-dualboot を参照してください"
   }
 };
 let lang="en";
@@ -418,7 +474,7 @@ function show(n){
 let NEED=[
   {name:"ats-mini-bootloader-v4.bin", local:"firmware/ats-mini-bootloader-v4.bin", addr:0x0},
   {name:"ats-mini-partitions-v4.bin", local:"firmware/ats-mini-partitions-v4.bin", addr:0x8000},
-  {name:"ats-mini-recovery-4.1.0.bin", local:"firmware/ats-mini-recovery-4.1.0.bin", addr:0x860000},
+  {name:"ats-mini-recovery-4.1.1.bin", local:"firmware/ats-mini-recovery-4.1.1.bin", addr:0x860000},
 ];
 
 // firmware/manifest.json lists the files to flash; updating a release means
@@ -587,7 +643,7 @@ $("d_ok").onclick=()=>$("dmodal").classList.remove("on");
 (function(){
   let l=null; try{l=localStorage.getItem("ats-inst-lang");}catch(e){}
   if(!l){ const n=(navigator.language||"en").slice(0,2).toLowerCase();
-    l=(n==="ru")?"ru":(n==="ko")?"ko":"en"; }
+    l={ru:"ru",ko:"ko",zh:"zh",ja:"ja"}[n]||"en"; }
   setLang(l); show(1); loadManifest();
   if(!navigator.serial){ status(T("notserial")); $("select").disabled=true; }
 })();
