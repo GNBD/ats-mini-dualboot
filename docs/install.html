@@ -36,9 +36,23 @@
   h1{font-size:19px;margin:0;letter-spacing:-.02em}
   .sub{color:var(--mut);font-size:12.5px;margin:2px 0 0}
   .top{display:flex;gap:8px;align-items:center}
-  .langs{display:flex;gap:3px;background:var(--chip);border:1px solid var(--line);border-radius:11px;padding:3px}
-  .langs button{background:none;color:var(--mut);border:0;border-radius:8px;padding:6px 10px;font-size:12.5px;cursor:pointer;transition:.2s}
-  .langs button.on{background:var(--accent);color:var(--accent-fg)}
+  .langs{position:relative}
+  .langs .langcur{display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--line);
+    border-radius:11px;height:38px;padding:0 12px;font-size:12.5px;color:var(--fg);cursor:pointer;transition:.2s}
+  .langs .langcur:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+  .langs .chev{width:7px;height:7px;border-right:1.6px solid var(--mut);border-bottom:1.6px solid var(--mut);
+    transform:rotate(45deg) translateY(-2px);transition:.25s}
+  .langs.open .chev{transform:rotate(-135deg) translateY(-2px)}
+  .langmenu{position:absolute;top:calc(100% + 7px);right:0;min-width:150px;background:var(--card);
+    border:1px solid var(--line);border-radius:12px;padding:5px;box-shadow:var(--shadow);
+    display:flex;flex-direction:column;gap:2px;opacity:0;visibility:hidden;transform:translateY(-6px);
+    transition:.18s;z-index:40}
+  .langs.open .langmenu{opacity:1;visibility:visible;transform:none}
+  .langmenu button{display:flex;align-items:center;justify-content:space-between;background:none;color:var(--fg);
+    border:0;border-radius:8px;padding:8px 10px;text-align:left;font-size:12.5px;cursor:pointer;transition:.15s}
+  .langmenu button:hover{background:var(--chip)}
+  .langmenu button.on{background:var(--accent);color:var(--accent-fg)}
+  .langmenu button.on::after{content:"✓"}
   .iconbtn{background:var(--card);border:1px solid var(--line);border-radius:11px;width:38px;height:38px;
     font-size:16px;cursor:pointer;color:var(--fg);transition:.2s}
   .iconbtn:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
@@ -166,11 +180,16 @@
     </div>
     <div class="top">
       <div class="langs" id="langs">
-        <button data-lang="en">English</button>
-        <button data-lang="ru">Русский</button>
-        <button data-lang="ko">한국어</button>
-        <button data-lang="zh">中文</button>
-        <button data-lang="ja">日本語</button>
+        <button class="langcur" id="langcur" aria-haspopup="listbox" aria-expanded="false">
+          <span id="langlabel">English</span><span class="chev"></span>
+        </button>
+        <div class="langmenu" id="langmenu" role="listbox">
+          <button data-lang="en">English</button>
+          <button data-lang="ru">Русский</button>
+          <button data-lang="ko">한국어</button>
+          <button data-lang="zh">中文</button>
+          <button data-lang="ja">日本語</button>
+        </div>
       </div>
       <button class="iconbtn" id="theme" aria-label="Theme">◐</button>
     </div>
@@ -437,14 +456,27 @@ const I18N = {
 let lang="en";
 const T=k=>(I18N[lang]&&I18N[lang][k])||I18N.en[k]||k;
 const $=id=>document.getElementById(id);
+const LANG_NAME={en:"English",ru:"Русский",ko:"한국어",zh:"中文",ja:"日本語"};
 function setLang(l){
   if(!I18N[l]) l="en"; lang=l; document.documentElement.lang=l;
   document.querySelectorAll("[data-i18n]").forEach(el=>{const v=I18N[l][el.getAttribute("data-i18n")];if(v!==undefined)el.textContent=v;});
   document.querySelectorAll("[data-i18n-ph]").forEach(el=>{const v=I18N[l][el.getAttribute("data-i18n-ph")];if(v!==undefined)el.placeholder=v;});
-  document.querySelectorAll("#langs button").forEach(b=>b.classList.toggle("on",b.dataset.lang===l));
+  document.querySelectorAll("#langmenu button").forEach(b=>b.classList.toggle("on",b.dataset.lang===l));
+  const lbl=$("langlabel"); if(lbl) lbl.textContent=LANG_NAME[l]||"English";
   try{localStorage.setItem("ats-inst-lang",l);}catch(e){}
 }
-document.querySelectorAll("#langs button").forEach(b=>b.addEventListener("click",()=>setLang(b.dataset.lang)));
+const langsEl=$("langs");
+$("langcur").addEventListener("click",e=>{
+  e.stopPropagation();
+  const open=langsEl.classList.toggle("open");
+  $("langcur").setAttribute("aria-expanded", String(open));
+});
+document.querySelectorAll("#langmenu button").forEach(b=>b.addEventListener("click",()=>{
+  setLang(b.dataset.lang); langsEl.classList.remove("open"); $("langcur").setAttribute("aria-expanded","false");
+}));
+document.addEventListener("click",e=>{
+  if(!langsEl.contains(e.target)){ langsEl.classList.remove("open"); $("langcur").setAttribute("aria-expanded","false"); }
+});
 
 const logEl=$("log"), st=$("status"), fill=$("fill");
 const log=s=>{logEl.textContent+=s+"\n";logEl.scrollTop=logEl.scrollHeight;};
