@@ -51,7 +51,7 @@ Chrome/Edge에서 열고 → **기기 연결** → (선택) app0/app1 펌웨어 
 - 슬롯별 설정 분리(DES), 첫 부팅 가이드, 호출부호(콜사인) 표시
 - 파티션: [`ats-mini-recovery-theme/partitions.csv`](ats-mini-recovery-theme/partitions.csv)
 
-### `ats-mini-recovery-lite` — N8R2 8MB (v1.0.0)
+### lite버전 무기한 중단 `ats-mini-recovery-lite` — N8R2 8MB (v1.0.0)
 
 8MB 기기용 최소 부트 매니저. 웹서버·WiFi·QR이 없어 가볍습니다.
 
