@@ -76,7 +76,7 @@ static constexpr const lgfx::IFont* FONT_TINY  = &lgfx::fonts::Font0;
 #define COL_KEY     RGB(7, 14, 7)     // keyboard key face
 #define COL_KEYSEL  RGB(20, 44, 17)   // keyboard selected key (same as COL_ACC)
 
-#define RECOVERY_VERSION "4.1.1"
+#define RECOVERY_VERSION "4.1.2"
 
 // Default: fetch this .txt (one URL per line). Local /update_url.txt and
 // DEFAULT_UPDATE_URLS are fallbacks when the remote list is unavailable.
@@ -135,14 +135,16 @@ static const char *menu[] = {
 // Tiles that fit one page of the main menu (a 3x2 grid).
 #define MENU_PAGE_TILES 6
 
-// Settings > ...  (Network / Brightness / LittleFS / Backup / Guide / About)
+// Settings > ...  (Network / Brightness / LittleFS / Backup / Guide / About /
+// Callsign)
 static const char *settingsMenu[] = {
   "Network",
   "Brightness",
   "LittleFS",
   "Backup",
   "Guide",
-  "About"
+  "About",
+  "Callsign"
 };
 #define SETTINGS_COUNT (sizeof(settingsMenu) / sizeof(settingsMenu[0]))
 
@@ -347,7 +349,8 @@ static void uiDotGrid()
 enum {
   ICON_SLOT0 = 0, ICON_SLOT1, ICON_UPDATE, ICON_SETTINGS, ICON_ERASE,
   ICON_WIFI, ICON_ABOUT, ICON_BRIGHT, ICON_WIFICFG, ICON_WEB,
-  ICON_BOOT, ICON_HOLD, ICON_FOLDER, ICON_NET, ICON_TRASH, ICON_DB
+  ICON_BOOT, ICON_HOLD, ICON_FOLDER, ICON_NET, ICON_TRASH, ICON_DB,
+  ICON_CALLSIGN
 };
 
 static void uiMenuIcon(int id, int cx, int cy, uint16_t acc)
@@ -495,6 +498,13 @@ static void uiMenuIcon(int id, int cx, int cy, uint16_t acc)
         gSprite.drawFastVLine(cx - 4 + i * 4, cy - 6, 12, COL_LINE);
       break;
     }
+    case ICON_CALLSIGN: // ID badge
+    {
+      gSprite.drawRoundRect(cx - 13, cy - 14, 26, 28, 4, acc);
+      gSprite.fillCircle(cx, cy - 6, 4, acc);
+      gSprite.drawLine(cx - 8, cy + 8, cx + 8, cy + 8, acc);
+      break;
+    }
     case ICON_DB: // storage cylinder
     {
       gSprite.drawEllipse(cx, cy - 8, 9, 4, acc);
@@ -519,7 +529,8 @@ static void uiMenuIcon(int id, int cx, int cy, uint16_t acc)
 static void drawHeader(const char *title, const char *right);
 
 // Tile geometry for a selection screen: 2/3 items -> one row of big tiles,
-// 4 items -> 2x2, 5/6 items -> the 3x2 main menu grid.
+// 4 items -> 2x2, 5/6 items -> the 3x2 main menu grid, 7/8 items -> a 4x2 grid
+// of smaller tiles (the last cell may stay empty).
 static void tileGeom(int n, int &x0, int &y0, int &w, int &h,
                      int &dx, int &dy, int &cols)
 {
@@ -543,12 +554,22 @@ static void tileGeom(int n, int &x0, int &y0, int &w, int &h,
     dy = 62;
     y0 = 28;
   }
-  else
+  else if(n <= 6)
   {
     cols = 3;
     w = 93;
     dx = 101;
     x0 = 12;
+    h = 56;
+    dy = 60;
+    y0 = 28;
+  }
+  else
+  {
+    cols = 4;
+    w = 70;
+    dx = 78;
+    x0 = 8;
     h = 56;
     dy = 60;
     y0 = 28;
@@ -874,6 +895,66 @@ static void applyBrightness(int pct)
   if(pct < BRIGHT_MIN) pct = BRIGHT_MIN;
   if(pct > BRIGHT_MAX) pct = BRIGHT_MAX;
   ledcWrite(PIN_LCD_BL, (pct * 255) / 100);
+}
+
+// ---------------------------------------------------------------------------
+// Callsign (Settings > Callsign): the boot splash title and the recovery menu
+// title. Stored in the same uicfg namespace as the brightness. Cached in RAM so
+// the menu does not hit NVS on every redraw.
+// ---------------------------------------------------------------------------
+
+#define CALLSIGN_MAX 16
+
+static String gCallsign = "";
+static bool   gGreeting = true;
+
+static String loadCallsign()
+{
+  if(!prefs.begin("uicfg", true, STORAGE_PARTITION)) return "";
+  String v = prefs.getString("call", "");
+  prefs.end();
+  if(v.length() > CALLSIGN_MAX) v = v.substring(0, CALLSIGN_MAX);
+  return v;
+}
+
+static void saveCallsign(const String &v)
+{
+  if(!prefs.begin("uicfg", false, STORAGE_PARTITION)) return;
+  prefs.putString("call", v);
+  prefs.end();
+}
+
+static bool loadGreeting()
+{
+  if(!prefs.begin("uicfg", true, STORAGE_PARTITION)) return true;
+  bool v = prefs.getBool("greet", true);
+  prefs.end();
+  return v;
+}
+
+static void saveGreeting(bool v)
+{
+  if(!prefs.begin("uicfg", false, STORAGE_PARTITION)) return;
+  prefs.putBool("greet", v);
+  prefs.end();
+}
+
+static void loadUiIdentity()
+{
+  gCallsign = loadCallsign();
+  gGreeting = loadGreeting();
+}
+
+// Only printable ASCII is accepted, so a non-Latin (CJK/Cyrillic) paste can
+// never reach the Latin-only fonts and render as blanks.
+static bool asciiPrintable(const String &s)
+{
+  for(size_t i = 0; i < s.length(); i++)
+  {
+    uint8_t c = (uint8_t)s[i];
+    if(c < 0x20 || c > 0x7E) return false;
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1770,7 +1851,8 @@ static void drawMenu(int selected)
   const char *hintR = "HOLD=OPEN";
   if(gWebEnabled && ip.length() > 0 && ip != "-") hintR = ip.c_str();
 
-  drawTilePage("Boot Manager", gBootSlot, "TURN=MOVE", hintR,
+  drawTilePage(gCallsign.length() ? gCallsign.c_str() : "Boot Manager",
+               gBootSlot, "TURN=MOVE", hintR,
                &menu[base], &icons[base], &accs[base], count,
                selected - base);
 
@@ -1807,9 +1889,10 @@ static void drawWifiMenu(int selected)
 static void drawSettingsMenu(int selected)
 {
   static const int icons[SETTINGS_COUNT] =
-    {ICON_WIFI, ICON_BRIGHT, ICON_FOLDER, ICON_DB, ICON_BOOT, ICON_ABOUT};
+    {ICON_WIFI, ICON_BRIGHT, ICON_FOLDER, ICON_DB, ICON_BOOT, ICON_ABOUT,
+     ICON_CALLSIGN};
   static const uint16_t accs[SETTINGS_COUNT] =
-    {COL_ACC, COL_OK, COL_GOLD, COL_OK, COL_GOLD, COL_ACC};
+    {COL_ACC, COL_OK, COL_GOLD, COL_OK, COL_GOLD, COL_ACC, COL_GOLD};
 
   static const char *hints[SETTINGS_COUNT] = {
     "Connect to a network",
@@ -1817,9 +1900,12 @@ static void drawSettingsMenu(int selected)
     "Rename or delete files",
     "Save or load app cfg",
     "Encoder & firmware guide",
-    "Version, licenses, QR"
+    "Version, licenses, QR",
+    "Boot callsign"
   };
 
+  // Seven tiles still fit one page as a 4x2 grid of smaller tiles (one cell
+  // stays empty), so there is no second page here.
   drawTilePage("SETTINGS", NULL, hints[selected], "CLICK=BACK  HOLD=OPEN",
                settingsMenu, icons, accs, SETTINGS_COUNT, selected);
 }
@@ -1875,6 +1961,36 @@ static void runBrightness()
   }
 }
 
+// Declared here because the Callsign editor (below) runs before the shared
+// keypad text input is defined later in the sketch.
+static bool runTextInput(const char *title, const String &initial, String &out,
+                         const char *suffix, bool allowEmpty);
+
+// Settings > Callsign: edit the boot callsign, then choose whether the splash
+// shows the greeting line. An empty callsign restores the default branding.
+static void runCallsign()
+{
+  String value;
+  if(!runTextInput("CALLSIGN", gCallsign, value, nullptr, true)) return;   // X
+
+  bool greet = gGreeting;
+  if(value.length())
+  {
+    static const char *gLabels[] = {"Greeting ON", "Greeting OFF"};
+    static const int gIcons[] = {ICON_WEB, ICON_HOLD};
+    static const uint16_t gAccs[] = {COL_OK, COL_MUTED};
+    int g = runTileChoice("GREETING", "TURN=MOVE", "CLICK=BACK  HOLD=OK",
+                          gLabels, gIcons, gAccs, 2);
+    if(g < 0) return;                                                     // back
+    greet = (g == 0);
+  }
+
+  gCallsign = value;
+  gGreeting = greet;
+  saveCallsign(value);
+  saveGreeting(greet);
+}
+
 static void runAbout();
 static void runWifiMenu();
 
@@ -1905,7 +2021,8 @@ static void runSettingsMenu()
     else if(selected == 2) runLittleFsManager();
     else if(selected == 3) runBackupMenu();
     else if(selected == 4) runTutorial();
-    else runAbout();
+    else if(selected == 5) runAbout();
+    else runCallsign();
 
     drawSettingsMenu(selected);
     delay(10);
@@ -3629,6 +3746,14 @@ static void handleRoot()
 
   // ---- Status ----
   html += F("<div class='pane on' id='p-status'>");
+  html += F("<div class='card'><h2>Callsign</h2>");
+  html += "<input type='text' id='callin' maxlength='16' "
+          "placeholder='HL2ABC (blank = default)' value='" + htmlEsc(gCallsign) + "'>";
+  html += F("<label style='display:flex;gap:8px;align-items:center;font-size:14px;margin:6px 0'>"
+    "<input type='checkbox' id='greet' style='width:auto;margin:0'");
+  if(gGreeting) html += F(" checked");
+  html += F("><span>Show greeting (WELCOME)</span></label>"
+    "<button class='btn' data-act='callsign'>Save</button></div>");
   html += F("<div class='card'><h2>App slots</h2>");
   for(int s = 0; s < 2; s++)
   {
@@ -3849,6 +3974,7 @@ static void handleRoot()
     "del:['Delete','Delete this file permanently?'],"
     "authset:['Web account','Save and enable login?'],"
     "authoff:['Web account','Disable login?'],"
+    "callsign:['Callsign','Save the boot callsign?'],"
     "get:['Download','Download this file?']};"
     "var mtarget=null;"
     "function askText(el,def){var s=el.getAttribute('data-name');"
@@ -3865,6 +3991,7 @@ static void handleRoot()
     "else if(a==='del')location.href='/delete?name='+encodeURIComponent(el.getAttribute('data-name'));"
     "else if(a==='authset')location.href='/webauth?on=1&user='+encodeURIComponent($('auser').value)+'&pass='+encodeURIComponent($('apass').value);"
     "else if(a==='authoff')location.href='/webauth?on=0';"
+    "else if(a==='callsign')location.href='/callsign?text='+encodeURIComponent($('callin').value)+'&greet='+($('greet').checked?'1':'0');"
     "else location.href=el.getAttribute('data-href');}"
     "document.addEventListener('click',function(e){"
     "var el=e.target.closest?e.target.closest('[data-act]'):null;"
@@ -4206,6 +4333,36 @@ static void handleWebToggle()
   gUiRefresh = true;
 }
 
+static void handleCallsign()
+{
+  if(!webAuthed()) return;
+  if(gFlashBusy || uploadBusy()) { busyPage(); return; }
+
+  String text = server.hasArg("text") ? server.arg("text") : "";
+  bool greet = !server.hasArg("greet") || server.arg("greet") == "1";
+  text.trim();
+
+  if(text.length() > CALLSIGN_MAX || !asciiPrintable(text))
+  {
+    server.send(400, "text/html",
+      "<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+      "<body style='font-family:sans-serif;background:#0e1116;color:#e6edf3;text-align:center;padding:48px'>"
+      "<h2>Invalid callsign</h2>"
+      "<p style='color:#8b949e'>Use printable ASCII only (A-Z, 0-9, symbols), up to 16 characters.</p>"
+      "<a href='/' style='color:#58a6ff'>Back</a></body>");
+    return;
+  }
+
+  gCallsign = text;
+  gGreeting = greet;
+  saveCallsign(text);
+  saveGreeting(greet);
+  gUiRefresh = true;
+
+  server.sendHeader("Location", "/");
+  server.send(302, "text/plain", "");
+}
+
 static String jsonEsc(const String &s)
 {
   String o;
@@ -4359,6 +4516,7 @@ static void startWebBackground()
   server.on("/flashstatus", HTTP_GET, handleFlashStatus);
   server.on("/web", HTTP_GET, handleWebToggle);
   server.on("/webauth", HTTP_GET, handleWebAuth);
+  server.on("/callsign", HTTP_GET, handleCallsign);
   server.on("/scan", HTTP_GET, handleScan);
   server.on("/connect", HTTP_GET, handleConnect);
   server.on("/status", HTTP_GET, handleStatus);
@@ -4444,22 +4602,35 @@ static void drawAboutPage(int page)
     case 3:
     {
       gSprite.setTextColor(COL_TEXT, COL_BG);
-      gSprite.drawString("Partition", 8, 34, FONT_SMALL);
+      gSprite.drawString("Device", 8, 34, FONT_SMALL);
       gSprite.setTextColor(COL_MUTED, COL_BG);
 
-      // 현재 파티션 테이블을 그대로 나열 (2열)
-      int idx = 0;
-      char buf[40];
-      esp_partition_iterator_t it =
-        esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
-      while(it)
-      {
-        const esp_partition_t *p = esp_partition_get(it);
-        snprintf(buf, sizeof(buf), "0x%06X %s", (unsigned)p->address, p->label);
-        gSprite.drawString(buf, 6 + (idx / 5) * 162, 46 + (idx % 5) * 16, FONT_SMALL);
-        idx++;
-        it = esp_partition_next(it);
-      }
+      uint32_t flashMb = ESP.getFlashChipSize() / 1048576UL;
+      uint32_t psramMb = (uint32_t)ESP.getPsramSize() / 1048576UL;
+      char buf[48];
+
+      snprintf(buf, sizeof(buf), "%s  rev %u  %u cores",
+               ESP.getChipModel(), (unsigned)ESP.getChipRevision(),
+               (unsigned)ESP.getChipCores());
+      gSprite.drawString(buf, 8, 50, FONT_SMALL);
+
+      snprintf(buf, sizeof(buf), "CPU %lu MHz",
+               (unsigned long)ESP.getCpuFreqMHz());
+      gSprite.drawString(buf, 8, 66, FONT_SMALL);
+
+      snprintf(buf, sizeof(buf), "Flash %luMB   PSRAM %luMB",
+               (unsigned long)flashMb, (unsigned long)psramMb);
+      gSprite.drawString(buf, 8, 82, FONT_SMALL);
+
+      snprintf(buf, sizeof(buf), "Module  N%luR%lu",
+               (unsigned long)flashMb, (unsigned long)psramMb);
+      gSprite.drawString(buf, 8, 98, FONT_SMALL);
+
+      snprintf(buf, sizeof(buf), "MAC  %s", WiFi.macAddress().c_str());
+      gSprite.drawString(buf, 8, 114, FONT_SMALL);
+
+      snprintf(buf, sizeof(buf), "SDK  %s", ESP.getSdkVersion());
+      gSprite.drawString(buf, 8, 130, FONT_SMALL);
       break;
     }
   }
@@ -4681,7 +4852,7 @@ static void drawKb()
 // Returns true with `out` filled when held to accept. A blank result is
 // rejected, so an existing name is never replaced by nothing.
 static bool runTextInput(const char *title, const String &initial, String &out,
-                        const char *suffix = nullptr)
+                        const char *suffix, bool allowEmpty)
 {
   String value = initial;
   String tail = suffix ? suffix : "";
@@ -4724,7 +4895,7 @@ static bool runTextInput(const char *title, const String &initial, String &out,
     uint32_t h = readButton();
     if(h >= 300)
     {
-      if(value.length() == 0) { redraw(); continue; }
+      if(value.length() == 0 && !allowEmpty) { redraw(); continue; }
       out = value + tail;
       return true;
     }
@@ -4855,7 +5026,7 @@ static void runLittleFsManager()
     if(act == 0)
     {
       String newName;
-      if(runTextInput("RENAME", files[selected], newName))
+      if(runTextInput("RENAME", files[selected], newName, nullptr, false))
       {
         String target = "/" + newName;
         bool ok = (target != path) && LittleFS.rename(path, target);
@@ -5249,7 +5420,7 @@ static void runBackupExport()
 
   const char *initial = (t == 1) ? "app1" : "app0";
   String name;
-  if(!runTextInput("SAVE AS", initial, name, ".nvs")) return;
+  if(!runTextInput("SAVE AS", initial, name, ".nvs", false)) return;
 
   uint32_t addr = (t == 1) ? DES_SETTINGS_ENV1 : DES_SETTINGS_ENV0;
   String path = "/" + name;
@@ -5382,19 +5553,45 @@ void setup()
   gSprite.createSprite(SCR_W, SCR_H);
   gSprite.fillScreen(COL_BG);
   uiDotGrid();
+  loadUiIdentity();
   gSprite.setTextDatum(TC_DATUM);
-  gSprite.setTextColor(COL_GOLD, COL_BG);
-  gSprite.drawString("Boot Manager", 160, 50, FONT_LARGE);
-  gSprite.setTextColor(COL_MUTED, COL_BG);
-  gSprite.drawString("github.com/GNBD/ats-mini-dualboot", 160, 100, FONT_TINY);
+  if(gCallsign.length())
   {
-    char slotLine[40];
-    snprintf(slotLine, sizeof(slotLine), "Current slot: %s", gBootSlot);
+    // Callsign replaces the brand on the big line; the brand moves to the
+    // bottom line together with the version.
     gSprite.setTextColor(COL_GOLD, COL_BG);
-    gSprite.drawString(slotLine, 160, 128, FONT_SMALL);
+    gSprite.drawString(gCallsign, 160, 46, FONT_LARGE);
+    if(gGreeting)
+    {
+      gSprite.setTextColor(COL_ACC, COL_BG);
+      gSprite.drawString("WELCOME", 160, 78, FONT_SMALL);
+    }
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString("github.com/GNBD/ats-mini-dualboot", 160, 104, FONT_TINY);
+    {
+      char slotLine[40];
+      snprintf(slotLine, sizeof(slotLine), "Current slot: %s", gBootSlot);
+      gSprite.setTextColor(COL_GOLD, COL_BG);
+      gSprite.drawString(slotLine, 160, 126, FONT_SMALL);
+    }
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString("Boot Manager v" RECOVERY_VERSION " (DES)", 160, 150, FONT_TINY);
   }
-  gSprite.setTextColor(COL_MUTED, COL_BG);
-  gSprite.drawString("v" RECOVERY_VERSION " (DES)", 160, 150, FONT_TINY);
+  else
+  {
+    gSprite.setTextColor(COL_GOLD, COL_BG);
+    gSprite.drawString("Boot Manager", 160, 50, FONT_LARGE);
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString("github.com/GNBD/ats-mini-dualboot", 160, 100, FONT_TINY);
+    {
+      char slotLine[40];
+      snprintf(slotLine, sizeof(slotLine), "Current slot: %s", gBootSlot);
+      gSprite.setTextColor(COL_GOLD, COL_BG);
+      gSprite.drawString(slotLine, 160, 128, FONT_SMALL);
+    }
+    gSprite.setTextColor(COL_MUTED, COL_BG);
+    gSprite.drawString("v" RECOVERY_VERSION " (DES)", 160, 150, FONT_TINY);
+  }
   gSprite.setTextDatum(TL_DATUM);
   gSprite.pushSprite(0, 0);
   applyBrightness(loadBrightness());

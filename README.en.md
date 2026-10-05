@@ -28,7 +28,7 @@ Flashes the boot manager (recovery) and app firmware **right from the browser**.
 
 | Part | Sketch | Hardware | recovery | Web/OTA | Status |
 |---|---|---|---|---|---|
-| Boot manager | `ats-mini-recovery-beta` | N16R8 (16MB) | `0x860000` | Yes | tested |
+| Boot manager | `ats-mini-recovery-theme` | N16R8 (16MB) | `0x860000` | Yes | tested |
 | Boot manager | `ats-mini-recovery-lite` | N8R2 (8MB) | `0x660000` | No | **untested** |
 
 Three rules:
@@ -40,14 +40,15 @@ Three rules:
 
 ## Boot manager variants
 
-### `ats-mini-recovery-beta` — 16MB default (v3.1.1)
+### `ats-mini-recovery-theme` — 16MB default (v4.1.2 DES)
 
-Default boot manager for current 16MB (N16R8) devices.
+Default boot manager for current 16MB (N16R8) devices (theme UI).
 
-- Menu: Boot App0 / Boot App1 / Firmware Update / WiFi / Erase / About
-- Serves a background web server when connected to a STA WiFi (file upload /
-  firmware update); otherwise runs as an AP.
-- Partition table: [`ats-mini-recovery-beta/partitions.csv`](ats-mini-recovery-beta/partitions.csv)
+- Menu: Boot App0 / Boot App1 / Firmware Update / Erase / Partition / Settings
+- Web UI with account protection, partition resize/info/repair, LittleFS file
+  manager, settings backup/restore.
+- Per-slot settings (DES), first-run guide, operator callsign on the splash.
+- Partition table: [`ats-mini-recovery-theme/partitions.csv`](ats-mini-recovery-theme/partitions.csv)
 
 ### `ats-mini-recovery-lite` — N8R2 8MB (v1.0.0)
 
@@ -64,19 +65,19 @@ Minimal boot manager for 8MB devices. No web server, WiFi or QR code.
 
 | Target | Required hardware | Notes |
 |---|---|---|
-| `ats-mini-recovery-beta` | ESP32-S3 **N16R8** (16MB flash + 8MB PSRAM) | Other variants (N8R2, N8R8, N16R2, ...) untested |
+| `ats-mini-recovery-theme` | ESP32-S3 **N16R8** (16MB flash + 8MB PSRAM) | Other variants (N8R2, N8R8, N16R2, ...) untested |
 | `ats-mini-recovery-lite` | ESP32-S3 **N8R2** (8MB flash + 2MB PSRAM) | Untested on hardware |
 
 ## Partitions and bootloader
 
 | flash | Partition table | recovery | Custom bootloader |
 |---|---|---|---|
-| 16MB | [`beta`](ats-mini-recovery-beta/partitions.csv) | `0x860000` | [`beta/bootloader.bin`](ats-mini-recovery-beta/bootloader.bin) |
+| 16MB | [`theme`](ats-mini-recovery-theme/partitions.csv) | `0x860000` | [`theme/bootloader.bin`](ats-mini-recovery-theme/bootloader.bin) |
 | 8MB | [`lite`](ats-mini-recovery-lite/partitions.csv) | `0x660000` | [`lite/bootloader.bin`](ats-mini-recovery-lite/bootloader.bin) |
 
 A **recovery-first custom bootloader** makes the boot manager always run first.
 It is built from ESP-IDF v5.5.5 for each flash size; see
-[`ats-mini-recovery-beta/bootloader.md`](ats-mini-recovery-beta/bootloader.md).
+[`ats-mini-recovery-theme/bootloader.md`](ats-mini-recovery-theme/bootloader.md).
 
 **How it works:** the boot manager calls `esp_ota_set_boot_partition()`, marking
 the target `ESP_OTA_IMG_NEW` for a **one-shot** boot. Once the target confirms

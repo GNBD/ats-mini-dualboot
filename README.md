@@ -31,7 +31,7 @@ Chrome/Edge에서 열고 → **기기 연결** → (선택) app0/app1 펌웨어 
 
 | 구성 | 스케치 | 대상 하드웨어 | recovery | 웹/OTA | 상태 |
 |---|---|---|---|---|---|
-| 부트 매니저 | `ats-mini-recovery-beta` | N16R8 (16MB) | `0x860000` | O | 테스트됨 |
+| 부트 매니저 | `ats-mini-recovery-theme` | N16R8 (16MB) | `0x860000` | O | 테스트됨 |
 | 부트 매니저 | `ats-mini-recovery-lite` | N8R2 (8MB) | `0x660000` | X | **미검증** |
 
 핵심 규칙 세 가지:
@@ -42,13 +42,14 @@ Chrome/Edge에서 열고 → **기기 연결** → (선택) app0/app1 펌웨어 
 
 ## 부트 매니저 변종
 
-### `ats-mini-recovery-beta` — 16MB 기본 (v3.1.1)
+### `ats-mini-recovery-theme` — 16MB 기본 (v4.1.2 DES)
 
-현재 16MB(N16R8) 기기의 기본 부트 매니저.
+현재 16MB(N16R8) 기기의 기본 부트 매니저 (테마 UI).
 
-- 메뉴: Boot App0 / Boot App1 / Firmware Update / WiFi / Erase / About
-- STA WiFi 연결 시 백그라운드 웹서버로 파일 업로드·펌웨어 업데이트, 미연결 시 AP
-- 파티션: [`ats-mini-recovery-beta/partitions.csv`](ats-mini-recovery-beta/partitions.csv)
+- 메뉴: Boot App0 / Boot App1 / Firmware Update / Erase / Partition / Settings
+- 웹 UI·계정 보호, 파티션 리사이즈·정보/복구, LittleFS 파일 관리, 설정 백업/복원
+- 슬롯별 설정 분리(DES), 첫 부팅 가이드, 호출부호(콜사인) 표시
+- 파티션: [`ats-mini-recovery-theme/partitions.csv`](ats-mini-recovery-theme/partitions.csv)
 
 ### `ats-mini-recovery-lite` — N8R2 8MB (v1.0.0)
 
@@ -64,19 +65,19 @@ Chrome/Edge에서 열고 → **기기 연결** → (선택) app0/app1 펌웨어 
 
 | 대상 | 필요 하드웨어 | 비고 |
 |---|---|---|
-| `ats-mini-recovery-beta` | ESP32-S3 **N16R8** (16MB flash + 8MB PSRAM) | 다른 버전(N8R2, N8R8, N16R2 등) 미검증 |
+| `ats-mini-recovery-theme` | ESP32-S3 **N16R8** (16MB flash + 8MB PSRAM) | 다른 버전(N8R2, N8R8, N16R2 등) 미검증 |
 | `ats-mini-recovery-lite` | ESP32-S3 **N8R2** (8MB flash + 2MB PSRAM) | 실기기 미검증 |
 
 ## 파티션 · 부트로더
 
 | flash | 파티션 테이블 | recovery | 커스텀 부트로더 |
 |---|---|---|---|
-| 16MB | [`beta`](ats-mini-recovery-beta/partitions.csv) | `0x860000` | [`beta/bootloader.bin`](ats-mini-recovery-beta/bootloader.bin) |
+| 16MB | [`theme`](ats-mini-recovery-theme/partitions.csv) | `0x860000` | [`theme/bootloader.bin`](ats-mini-recovery-theme/bootloader.bin) |
 | 8MB | [`lite`](ats-mini-recovery-lite/partitions.csv) | `0x660000` | [`lite/bootloader.bin`](ats-mini-recovery-lite/bootloader.bin) |
 
 부트 매니저가 항상 먼저 실행되도록 **recovery-first 커스텀 부트로더**를 사용합니다.
 ESP-IDF v5.5.5에서 각 flash 크기에 맞게 빌드하며, 빌드 방법은
-[`ats-mini-recovery-beta/bootloader.md`](ats-mini-recovery-beta/bootloader.md)에 있습니다.
+[`ats-mini-recovery-theme/bootloader.md`](ats-mini-recovery-theme/bootloader.md)에 있습니다.
 
 **동작 원리:** 부트 매니저는 `esp_ota_set_boot_partition()`로 대상을 `ESP_OTA_IMG_NEW`로
 지정해 **one-shot** 부팅을 시킵니다. 대상이 스스로 확인하거나(`esp_ota_mark_app_valid_cancel_rollback()`)
