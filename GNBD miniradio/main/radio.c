@@ -562,12 +562,15 @@ void ats_start(void)
     s_ats = ATS_SEEK;
     s_ats_ms = now_ms();
     s_ats_freq = b->min_hz;
-    if (s_ui.mode == RADIO_MODE_FM) {
-        s_ats_step = 100000;
-    } else if (s_ui.band_idx == 1 || s_ui.band_idx == 2) {
-        s_ats_step = 9000;
-    } else {
-        s_ats_step = 5000;
+    s_ats_step = eff_step_hz();
+    if (s_ats_step == 0) {
+        if (s_ui.mode == RADIO_MODE_FM) {
+            s_ats_step = 100000;
+        } else if (s_ui.band_idx == 1 || s_ui.band_idx == 2) {
+            s_ats_step = 9000;
+        } else {
+            s_ats_step = 5000;
+        }
     }
     if (s_radio_ok) {
         si4732_set_mute(&s_radio, true);
@@ -578,7 +581,7 @@ void ats_start(void)
     s_ui.sw_steps = 0;
     s_ui.sw_max = (int)((b->max_hz - b->min_hz) / s_ats_step) + 1;
     s_ats_timeout_ms = (uint32_t)s_ui.sw_max * 80 + 30000;
-    s_ats_wait = now_ms() + 12;
+    s_ats_wait = now_ms() + 36;
     if (s_hmi == HMI_TUNE) {
         ui_draw_all(&s_ui);
     } else {
@@ -623,11 +626,16 @@ void ats_poll(uint32_t now)
             if (e == ESP_OK) {
                 scan_rsq_show(&r, !good);
             }
-            if (good && s_ats_found < STORAGE_ATS_SLOTS) {
+            uint32_t gap = (s_ui.mode == RADIO_MODE_FM) ? 100000
+                         : ((s_ats_band == 1 || s_ats_band == 2) ? 9000 : 5000);
+            bool far_enough = (s_ats_last_freq == 0 ||
+                               s_ui.freq_hz - s_ats_last_freq >= gap);
+            if (good && far_enough && s_ats_found < STORAGE_ATS_SLOTS) {
                 preset_entry_t *p = &s_ats_list.slot[s_ats_found++];
                 p->freq_hz = s_ui.freq_hz;
                 p->band = (uint8_t)s_ats_band;
                 p->mode = (uint8_t)s_ui.mode;
+                s_ats_last_freq = s_ui.freq_hz;
                 if (s_ui.ui_mode != UI_MODE_EASY) {
                     ui_draw_all(&s_ui);
                 } else {
@@ -660,7 +668,7 @@ void ats_poll(uint32_t now)
         ats_finish("ATS STOP");
         return;
     }
-    s_ats_wait = now + 12;
+    s_ats_wait = now + 36;
 }
 
 /* ------------------------------------------------------------- 메뉴 */
