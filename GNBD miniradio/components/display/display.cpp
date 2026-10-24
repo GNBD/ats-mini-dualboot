@@ -29,6 +29,7 @@
 #include "esp_heap_caps.h"
 
 #include "display.h"
+#include "lgfx/utility/lgfx_qrcode.h"
 
 static const char *TAG = "display";
 
@@ -464,6 +465,32 @@ esp_err_t display_fill_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
     ESP_RETURN_ON_FALSE(s_inited, ESP_ERR_INVALID_STATE, TAG, "not init");
     canvas()->fillRect(x, y, w, h, color);
     display_mark_dirty(x, y, w, h);
+    return ESP_OK;
+}
+
+esp_err_t display_draw_qr(const char *text, int16_t x, int16_t y,
+                          uint8_t scale, uint16_t fg, uint16_t bg)
+{
+    ESP_RETURN_ON_FALSE(s_inited, ESP_ERR_INVALID_STATE, TAG, "not init");
+    ESP_RETURN_ON_FALSE(text && scale > 0, ESP_ERR_INVALID_ARG, TAG, "bad qr");
+
+    static uint8_t modules[256];
+    QRCode qr;
+    if (lgfx_qrcode_initText(&qr, modules, 3, ECC_LOW, text) != 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    int16_t w = (int16_t)qr.size * scale;
+    canvas()->fillRect(x, y, w, w, bg);
+    for (uint8_t my = 0; my < qr.size; ++my) {
+        for (uint8_t mx = 0; mx < qr.size; ++mx) {
+            if (lgfx_qrcode_getModule(&qr, mx, my)) {
+                canvas()->fillRect(x + mx * scale, y + my * scale,
+                                   scale, scale, fg);
+            }
+        }
+    }
+    display_mark_dirty(x, y, (uint16_t)w, (uint16_t)w);
     return ESP_OK;
 }
 

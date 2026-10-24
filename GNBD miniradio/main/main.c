@@ -2204,7 +2204,7 @@ void on_encoder(int d)
         break;
     case HMI_ABOUT:
         s_nav_ms = now;
-        about_next_page();
+        about_page_move(d);
         break;
     case HMI_EIBI_CONFIRM:
         s_nav_ms = now;

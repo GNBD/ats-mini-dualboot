@@ -3915,12 +3915,40 @@ void ui_draw_about(const char *version, const char *idf, const char *build,
     display_fill_screen(UI_BG);
 
     display_fill_round_rect(8, 5, 3, 12, 1, UI_ACC);
-    display_draw_text(16, 7, page ? "LICENSES" : "ABOUT", DISPLAY_FONT_TINY,
-                      UI_FG, UI_BG, DISPLAY_DATUM_TL);
+    const char *title = (page == 0) ? "GITHUB"
+                       : (page == 1) ? "ABOUT" : "LICENSES";
+    display_draw_text(16, 7, title, DISPLAY_FONT_TINY, UI_FG, UI_BG,
+                      DISPLAY_DATUM_TL);
+    char pg[16];
+    snprintf(pg, sizeof(pg), "%d/3", page + 1);
+    display_draw_text(UI_W - 16, 7, pg, DISPLAY_FONT_TINY, UI_MUTED, UI_BG,
+                      DISPLAY_DATUM_TR);
 
     panel(6, 24, 308, 128, 14, UI_PANEL, UI_LINE);
 
     if (page == 0) {
+        static const char *const url = "https://gnbdatsmini.netlify.app/";
+        display_fill_round_rect(10, 28, 124, 124, 10, 0xFFFF);
+        if (display_draw_qr(url, 28, 46, 3, 0x0000, 0xFFFF) != ESP_OK) {
+            display_draw_text(72, 80, "QR ERR", DISPLAY_FONT_SMALL,
+                              UI_RED, 0xFFFF, DISPLAY_DATUM_TC);
+        }
+
+        display_draw_text(142, 34, "GITHUB", DISPLAY_FONT_TINY, UI_ACC_HI,
+                          UI_PANEL, DISPLAY_DATUM_TL);
+        display_draw_text(142, 50, "GNBD miniradio", DISPLAY_FONT_TINY,
+                          UI_FG, UI_PANEL, DISPLAY_DATUM_TL);
+        display_draw_text(142, 68, "gnbdatsmini", DISPLAY_FONT_TINY,
+                          UI_ACC, UI_PANEL, DISPLAY_DATUM_TL);
+        display_draw_text(142, 80, "netlify.app", DISPLAY_FONT_TINY,
+                          UI_ACC, UI_PANEL, DISPLAY_DATUM_TL);
+        display_draw_text(142, 102, "SCAN TO OPEN", DISPLAY_FONT_TINY,
+                          UI_MUTED, UI_PANEL, DISPLAY_DATUM_TL);
+
+        display_draw_text(UI_W / 2, UI_H - 10,
+                          "turn: pages   press: back", DISPLAY_FONT_TINY,
+                          UI_MUTED, UI_BG, DISPLAY_DATUM_TC);
+    } else if (page == 1) {
         display_draw_text(UI_W / 2, 28, "GNBD", DISPLAY_FONT_LARGE, UI_FG,
                           UI_PANEL, DISPLAY_DATUM_TC);
         display_draw_text(UI_W / 2, 64, "MINI-RADIO FIRMWARE",
@@ -3958,7 +3986,7 @@ void ui_draw_about(const char *version, const char *idf, const char *build,
                           UI_FG, UI_PANEL, DISPLAY_DATUM_TR);
 
         display_draw_text(UI_W / 2, UI_H - 10,
-                          "turn: licenses   press: back", DISPLAY_FONT_TINY,
+                          "turn: pages   press: back", DISPLAY_FONT_TINY,
                           UI_MUTED, UI_BG, DISPLAY_DATUM_TC);
     } else {
         display_fill_round_rect(20, 31, 3, 9, 1, UI_ACC);
@@ -3990,7 +4018,7 @@ void ui_draw_about(const char *version, const char *idf, const char *build,
                           DISPLAY_FONT_TINY, UI_MUTED, UI_PANEL,
                           DISPLAY_DATUM_TC);
         display_draw_text(UI_W / 2, UI_H - 10,
-                          "turn: about   press: back", DISPLAY_FONT_TINY,
+                          "turn: pages   press: back", DISPLAY_FONT_TINY,
                           UI_MUTED, UI_BG, DISPLAY_DATUM_TC);
     }
 }

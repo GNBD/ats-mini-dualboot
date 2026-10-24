@@ -640,9 +640,9 @@ void open_about(void)
     about_draw();
 }
 
-void about_next_page(void)
+void about_page_move(int dir)
 {
-    s_about_page = (s_about_page + 1) % 2;
+    s_about_page = (s_about_page + (dir > 0 ? 1 : -1) + 3) % 3;
     about_draw();
 }
 

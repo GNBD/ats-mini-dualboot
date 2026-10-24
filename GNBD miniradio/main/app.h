@@ -385,7 +385,7 @@ void open_splash_app(void);
 void open_splash_keypad(int welcome);
 void open_quick_cfg(void);
 void open_about(void);
-void about_next_page(void);
+void about_page_move(int dir);
 esp_err_t radio_ensure_mode(void);
 esp_err_t radio_tune(void);
 esp_err_t radio_apply(void);

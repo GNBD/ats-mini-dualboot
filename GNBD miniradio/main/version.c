@@ -44,7 +44,7 @@ const char *app_build_no(void)
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
     };
-    int month = 0, day = 0, year = 0, hour = 0;
+    int month = 0, day = 0, year = 0, hour = 0, minute = 0, second = 0;
     char mstr[4] = {0};
 
     const esp_app_desc_t *d = esp_app_get_description();
@@ -57,14 +57,14 @@ const char *app_build_no(void)
                 }
             }
         }
-        sscanf(d->time, "%d", &hour);
+        sscanf(d->time, "%d:%d:%d", &hour, &minute, &second);
     }
 
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-        snprintf(build, sizeof(build), "%02d%02d%02d%02d",
-                 year % 100, month, day, hour);
+        snprintf(build, sizeof(build), "%02d%02d%02d%02d%02d%02d",
+                 year % 100, month, day, hour, minute, second);
     } else {
-        snprintf(build, sizeof(build), "--------");
+        snprintf(build, sizeof(build), "------------");
     }
     return build;
 }

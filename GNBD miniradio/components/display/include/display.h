@@ -82,6 +82,11 @@ esp_err_t display_fill_screen(uint16_t color_rgb565);
 esp_err_t display_fill_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
                             uint16_t color_rgb565);
 
+/** @brief QR 코드를 지정한 배율/색상으로 그립니다. */
+esp_err_t display_draw_qr(const char *text, int16_t x, int16_t y,
+                          uint8_t scale, uint16_t fg_rgb565,
+                          uint16_t bg_rgb565);
+
 /** @brief 사각형 테두리 (1px) */
 esp_err_t display_draw_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
                             uint16_t color_rgb565);
