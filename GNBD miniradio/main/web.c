@@ -287,7 +287,7 @@ static const char WEB_ROOT_MAIN[] =
     "</select></div>"
     "<div class='setrow' id='rrdsRow'><span class='k'>RDS</span>"
     "<select id='rrds' onchange='radioSet(\"rds\",this.value)'>"
-    "<option value='1'>ON</option><option value='0'>OFF</option>"
+    "<option value='0'>ON</option><option value='1'>OFF</option>"
     "</select></div>"
     "<div class='setrow' id='rdeemphRow'><span class='k'>De-emphasis</span>"
     "<select id='rdeemph' onchange='radioSet(\"deemph\",this.value)'>"
@@ -295,7 +295,7 @@ static const char WEB_ROOT_MAIN[] =
     "</select></div>"
     "<div class='setrow'><span class='k'>AGC</span>"
     "<select id='ragc' onchange='radioSet(\"agc\",this.value)'>"
-    "<option value='1'>ON</option><option value='0'>OFF</option>"
+    "<option value='0'>ON</option><option value='1'>OFF</option>"
     "</select></div>"
     "<div class='setrow'><span class='k'>Squelch</span>"
     "<span class='v' id='rsqv'>OFF</span></div>"
@@ -344,7 +344,8 @@ static const char WEB_ROOT_JS[] =
     "const b=$('bands');s.bands.forEach((n,i)=>{const x=document.createElement('button');"
     "x.className='chipbtn';x.textContent=n;x.onclick=()=>cmd('band='+i);"
     "b.appendChild(x);});}"
-    "function buildModes(s){const m=$('modes');"
+    "function buildModes(s){const key=s.band+'|'+s.mode;const m=$('modes');"
+    "if(m.dataset.k===key)return;m.dataset.k=key;"
     "const list=(s.band==='FM')?['FM']:['AM','LSB','USB'];m.innerHTML='';"
     "list.forEach(n=>{const x=document.createElement('button');"
     "x.className='chipbtn'+(s.mode===n?' on':'');x.textContent=n;"
@@ -352,7 +353,8 @@ static const char WEB_ROOT_JS[] =
     "function fillSel(el,arr,v){const k=arr.join('|');"
     "if(el.dataset.k!==k){el.innerHTML='';arr.forEach((n,i)=>{"
     "const o=document.createElement('option');o.value=i;o.textContent=n;"
-    "el.appendChild(o);});el.dataset.k=k;}el.value=v;}"
+    "el.appendChild(o);});el.dataset.k=k;}"
+    "if(document.activeElement!==el)el.value=v;}"
     "function radioSet(k,v){cmd('radio='+k+'&v='+encodeURIComponent(v));}"
     "async function tick(){try{"
     "const r=await fetch('/api/status',{cache:'no-store'});"
@@ -375,8 +377,8 @@ static const char WEB_ROOT_JS[] =
     "$('rrdsRow').style.display=fm?'':'none';"
     "$('rdeemphRow').style.display=fm?'':'none';"
     "fillSel($('rstep'),s.steps,s.step);fillSel($('rbw'),s.bws,s.bw);"
-    "$('rstereo').value=s.stereo_force?'1':'0';$('rrds').value=s.rds?'1':'0';"
-    "$('rdeemph').value=s.deemph75?'1':'0';$('ragc').value=s.agc?'1':'0';"
+    "$('rstereo').value=s.stereo_force?'1':'0';$('rrds').value=s.rds?'0':'1';"
+    "$('rdeemph').value=s.deemph75?'1':'0';$('ragc').value=s.agc?'0':'1';"
     "if(!rdrag){$('rsq').value=s.squelch_on?s.squelch:0;"
     "$('ravc').value=s.avc;$('rsm').value=s.softmute;"
     "$('rbfo').min=-s.bfo_max;$('rbfo').max=s.bfo_max;$('rbfo').value=s.bfo;}"
@@ -1046,9 +1048,9 @@ esp_err_t http_status_handler(httpd_req_t *req)
     }
     steps[so] = '\0';
 
-    static const char *fm[]  = {"AUTO", "110K", "84K", "60K", "40K"};
-    static const char *am[]  = {"6K", "4K", "3K", "2K", "1K", "1.8K", "2.5K"};
-    static const char *ssb[] = {"1.2K", "2.2K", "3K", "4K", "500", "1K"};
+    static const char *fm[]  = {"AUTO", "40K", "60K", "84K", "110K"};
+    static const char *am[]  = {"1K", "1.8K", "2K", "2.5K", "3K", "4K", "6K"};
+    static const char *ssb[] = {"500", "1K", "1.2K", "2.2K", "3K", "4K"};
     so = 0;
     bws[0] = '\0';
     for (int i = 0; i <= bw_max(); ++i) {
@@ -1105,7 +1107,7 @@ esp_err_t http_status_handler(httpd_req_t *req)
         s_ui.band_idx, bands, mode_str(s_ui.mode),
         (s_ui.mode == RADIO_MODE_FM && s_ui.stereo) ? "true" : "false",
         (s_step_idx[slot] < 0) ? 0 : (s_step_idx[slot] + 1), steps,
-        s_bw[slot], bws, (long)s_bfo, BFO_MAX_HZ,
+        bw_index(slot, s_bw[slot]), bws, (long)s_bfo, BFO_MAX_HZ,
         band_is_ssb(s_ui.mode) ? "true" : "false",
         s_rds_on ? "true" : "false",
         s_stereo_force ? "true" : "false",

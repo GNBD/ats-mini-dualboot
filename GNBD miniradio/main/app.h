@@ -409,6 +409,7 @@ void spectrum_scan_cancel(void);
 void spectrum_scan_apply(void);
 const char *bw_label(void);
 int bw_max(void);
+int bw_index(int slot, int code);
 int16_t radio_bfo_value(void);
 esp_err_t bw_apply(void);
 int preset_index_for_freq(uint32_t freq, int band);

@@ -427,7 +427,7 @@ static int bw_code_from_idx(int slot, int idx)
     return BW_ORDER[slot][idx];
 }
 
-static int bw_idx_from_code(int slot, int code)
+int bw_index(int slot, int code)
 {
     int n = bw_max() + 1;
     for (int i = 0; i < n; ++i) {
@@ -447,7 +447,7 @@ int opt_sel(int page, int item)
         case RM_MODE:    return (band_table[s_ui.band_idx].default_mode ==
                                  RADIO_MODE_FM) ? 0
                                 : ((int)s_ui.mode - (int)RADIO_MODE_AM);
-        case RM_BW:      return bw_idx_from_code(slot, s_bw[slot]);
+        case RM_BW:      return bw_index(slot, s_bw[slot]);
         case RM_STEP:    return (s_step_idx[slot] < 0) ? 0 : (s_step_idx[slot] + 1);
         case RM_RDS:     return s_rds_on ? 0 : 1;
         case RM_STEREO:  return s_stereo_force ? 1 : 0;
@@ -1538,7 +1538,13 @@ void ats_list_apply(void)
         page_radio();
         return;
     }
-    tune_entry(&s_ats_list.slot[s_ats_cur - 1]);
+    preset_entry_t *p = &s_ats_list.slot[s_ats_cur - 1];
+    if (p->freq_hz == 0) {
+        tune_entry(p);
+        return;
+    }
+    tune_entry(p);
+    page_radio();
 }
 
 void ats_list_long(void)
