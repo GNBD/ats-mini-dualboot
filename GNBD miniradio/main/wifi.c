@@ -22,21 +22,41 @@ static uint8_t s_sta_retry;
 
 #define WIFI_TX_MAX_DBM    14
 #define WIFI_TX_MIN_DBM    5
-#define WIFI_TX_FULL_MV    3700
-#define WIFI_TX_STEP_MV    50
+#define WIFI_TX_HYST_MV    25
 
 static int s_tx_dbm = WIFI_TX_MAX_DBM;
 static bool s_tx_ps_active;
 
 static int wifi_tx_target(int mv)
 {
-    if (mv >= WIFI_TX_FULL_MV) {
-        return WIFI_TX_MAX_DBM;
+    if (mv >= 3700) {
+        return 14;
     }
-    int steps = (WIFI_TX_FULL_MV - mv + WIFI_TX_STEP_MV - 1) /
-                WIFI_TX_STEP_MV;
-    int dbm = WIFI_TX_MAX_DBM - steps;
-    return (dbm < WIFI_TX_MIN_DBM) ? WIFI_TX_MIN_DBM : dbm;
+    if (mv >= 3650) {
+        return 13;
+    }
+    if (mv >= 3600) {
+        return 8;
+    }
+    if (mv >= 3550) {
+        return 7;
+    }
+    if (mv >= 3500) {
+        return 6;
+    }
+    return 5;
+}
+
+static int wifi_tx_zone_min(int dbm)
+{
+    switch (dbm) {
+    case 14: return 3700;
+    case 13: return 3650;
+    case 8:  return 3600;
+    case 7:  return 3550;
+    case 6:  return 3500;
+    default: return 0;
+    }
 }
 
 static void wifi_tx_apply(int dbm)
@@ -62,34 +82,24 @@ void wifi_update_tx_power(void)
         wifi_tx_apply(WIFI_TX_MAX_DBM);
         return;
     }
+    int target = wifi_tx_target(mv);
     if (!s_tx_ps_active) {
         s_tx_ps_active = true;
-        wifi_tx_apply(wifi_tx_target(mv));
+        wifi_tx_apply(target);
         return;
     }
-
-    int dbm = s_tx_dbm;
-    while (dbm > WIFI_TX_MIN_DBM) {
-        int drop_at = WIFI_TX_FULL_MV -
-                      (WIFI_TX_MAX_DBM - dbm) * WIFI_TX_STEP_MV - 30;
-        if (mv < drop_at) {
-            dbm--;
-        } else {
-            break;
+    if (target < s_tx_dbm) {
+        int lo = wifi_tx_zone_min(s_tx_dbm);
+        if (mv < lo - WIFI_TX_HYST_MV) {
+            wifi_tx_apply(target);
+        }
+    } else if (target > s_tx_dbm) {
+        int lo = wifi_tx_zone_min(target);
+        if (mv >= lo + WIFI_TX_HYST_MV) {
+            wifi_tx_apply(target);
         }
     }
-    while (dbm < WIFI_TX_MAX_DBM) {
-        int rise_at = WIFI_TX_FULL_MV -
-                      (WIFI_TX_MAX_DBM - dbm - 1) * WIFI_TX_STEP_MV + 30;
-        if (mv >= rise_at) {
-            dbm++;
-        } else {
-            break;
-        }
-    }
-    wifi_tx_apply(dbm);
 }
-
 void sntp_start(void);
 
 void wifi_event_handler(void *arg, esp_event_base_t base,
