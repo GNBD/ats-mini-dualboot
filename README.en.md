@@ -1,5 +1,7 @@
 # ATS Mini Dualboot
 
+> [GNBD miniradio landing page](https://gnbdatsmini.netlify.app/)
+
 **Work in progress** — crashes, boot failures and data loss may occur.
 [한국어](README.md)
 
