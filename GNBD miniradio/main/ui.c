@@ -75,6 +75,7 @@ static int ui_mode_slot(radio_mode_t m)
 
 #define HDR_H        22
 #define HDR_LINE_Y   21
+#define META_CLEAR_W 104
 
 #define HERO_X       6
 #define HERO_Y       24
@@ -1848,7 +1849,7 @@ static void draw_saved_badges(const ui_state_t *s)
 
 void ui_draw_band_meta(const ui_state_t *s)
 {
-    display_fill_rect(0, 22, 210, 18, UI_BG);
+    display_fill_rect(0, 22, META_CLEAR_W, 18, UI_BG);
 
     char meta[48];
     band_meta(s, meta, sizeof(meta));
@@ -1858,7 +1859,6 @@ void ui_draw_band_meta(const ui_state_t *s)
         display_draw_text((int16_t)(12 + mw + 6), 29, "STEREO",
                           DISPLAY_FONT_TINY, UI_OK, UI_BG, DISPLAY_DATUM_TL);
     }
-    draw_saved_badges(s);
 }
 
 static void draw_freq_text(int x, int y, const char *num, display_font_t font,
@@ -2518,21 +2518,7 @@ static void ui_draw_all_adv4(const ui_state_t *s)
     display_draw_text(312, 24, vb, DISPLAY_FONT_TINY, UI_MUTED, UI_BG,
                       DISPLAY_DATUM_TR);
 
-    int bx = 312 - display_text_width(vb, DISPLAY_FONT_TINY) - 8;
-    if (bx < 52) {
-        bx = 52;
-    }
-    if (s->ats_slot >= 0) {
-        char a[16];
-        snprintf(a, sizeof(a), "A%d", s->ats_slot + 1);
-        pill(bx - 46, 24, a, 46, UI_BLACK, UI_GOLD);
-        bx -= 52;
-    }
-    if (s->preset_slot >= 0) {
-        char p[16];
-        snprintf(p, sizeof(p), "P%d", s->preset_slot + 1);
-        pill(bx - 46, 24, p, 46, UI_BLACK, UI_ACC);
-    }
+    draw_saved_badges(s);
 
     draw_freq_text(12, 40, num, DISPLAY_FONT_LARGE, UI_BG);
     uint16_t fw = display_text_width(num, DISPLAY_FONT_LARGE);
