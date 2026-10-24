@@ -37,7 +37,7 @@ extern "C" {
 #define SEEK_TIMEOUT       10000
 #define RSQ_PERIOD         250
 #define RDS_PERIOD         500
-#define BATT_PERIOD        2000
+#define BATT_PERIOD        500
 #define TUNE_COALESCE_MS   15
 #define BFO_MAX_HZ         5000
 

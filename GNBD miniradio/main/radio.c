@@ -901,6 +901,12 @@ void rds_poll(uint32_t now)
 void battery_poll(uint32_t now)
 {
     static uint32_t last;
+    static uint32_t last_anim;
+    if (s_ui.have_battery && s_ui.battery.charging && s_hmi == HMI_TUNE &&
+        (now - last_anim) >= 250) {
+        last_anim = now;
+        ui_draw_header(&s_ui);
+    }
     if ((now - last) < BATT_PERIOD) {
         return;
     }

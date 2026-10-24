@@ -68,7 +68,6 @@ static uint32_t s_tune_save_ms;
 #define TOAST_TIME         2000
 #define SAVE_DELAY         2000
 #define RDS_PERIOD         500
-#define BATT_PERIOD        2000
 #define TUNE_COALESCE_MS   15
 #define BFO_MAX_HZ         5000
 

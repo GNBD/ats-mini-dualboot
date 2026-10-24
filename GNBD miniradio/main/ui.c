@@ -44,6 +44,7 @@ extern int      s_scan_rssi[16];
 extern int      s_scan_cursor;
 extern int      s_scan_top;
 extern volatile uint32_t s_radio_draw_seq;
+extern uint32_t now_ms(void);
 static void ui_draw_all_dx3(const ui_state_t *s);
 static void band_meta(const ui_state_t *s, char *buf, size_t n);
 
@@ -177,14 +178,12 @@ static void battery_pill(int x, int y, const battery_state_t *b)
     panel(x, y, 26, 11, 3, UI_CELL, UI_LINE);
     display_fill_rect((int16_t)(x + 26), (int16_t)(y + 3), 2, 5, UI_LINE);
     int fill = (b->percent * 20) / 100;
+    if (b->charging) {
+        fill = ((now_ms() / 350) % 3 + 1) * 20 / 3;
+    }
     if (fill > 0) {
         display_fill_round_rect((int16_t)(x + 2), (int16_t)(y + 2),
                                 (uint16_t)fill, 7, 2, col);
-    }
-    if (b->charging) {
-        display_fill_rect((int16_t)(x + 11), (int16_t)(y + 1), 2, 9, UI_ACC_HI);
-        display_fill_rect((int16_t)(x + 9), (int16_t)(y + 3), 6, 2, UI_ACC_HI);
-        display_fill_rect((int16_t)(x + 9), (int16_t)(y + 7), 6, 2, UI_ACC_HI);
     }
 }
 
