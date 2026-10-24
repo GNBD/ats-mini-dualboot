@@ -55,7 +55,7 @@ void storage_settings_defaults(storage_settings_t *out)
     out->bw[0]       = 0;          /* FM: auto */
     out->bw[1]       = 2;          /* AM: 3 kHz */
     out->bw[2]       = 1;          /* SSB: 2.2 kHz */
-    out->step_idx[0] = 0;          /* FM: 100 kHz */
+    out->step_idx[0] = -1;         /* FM: band default */
     out->step_idx[1] = -1;
     out->step_idx[2] = -1;
     out->bfo_hz      = 0;

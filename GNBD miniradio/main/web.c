@@ -1353,7 +1353,8 @@ esp_err_t http_cmd_handler(httpd_req_t *req)
         if (item >= 0) {
             c.type = WEB_CMD_RADIO;
             c.a = item;
-            if (!parse_int(arg, &c.b)) {
+            if (httpd_query_key_value(q, "v", arg, sizeof(arg)) != ESP_OK ||
+                !parse_int(arg, &c.b)) {
                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad value");
                 return ESP_FAIL;
             }

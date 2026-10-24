@@ -1435,7 +1435,13 @@ void fav_apply(void)
         page_radio();
         return;
     }
-    tune_entry(&s_presets.slot[s_fav_cursor - 1]);
+    preset_entry_t *p = &s_presets.slot[s_fav_cursor - 1];
+    if (p->freq_hz == 0) {
+        tune_entry(p);
+        return;
+    }
+    tune_entry(p);
+    page_radio();
 }
 
 void fav_long(void)
@@ -2940,8 +2946,13 @@ void web_cmd_execute(const web_cmd_t *c)
                 s_presets.slot[i] = s_presets.slot[i + 1];
             }
             s_presets.count--;
+            memset(&s_presets.slot[s_presets.count], 0,
+                   sizeof(s_presets.slot[s_presets.count]));
             storage_save_presets(&s_presets);
             mark_change();
+            if (s_hmi == HMI_FAV) {
+                fav_side_draw();
+            }
             toast("PRESET DELETED");
         }
         break;
