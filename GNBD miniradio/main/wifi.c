@@ -38,12 +38,6 @@ static int wifi_tx_target(int mv)
     if (mv >= 3600) {
         return 8;
     }
-    if (mv >= 3550) {
-        return 7;
-    }
-    if (mv >= 3500) {
-        return 6;
-    }
     return 5;
 }
 
@@ -53,8 +47,6 @@ static int wifi_tx_zone_min(int dbm)
     case 14: return 3700;
     case 13: return 3650;
     case 8:  return 3600;
-    case 7:  return 3550;
-    case 6:  return 3500;
     default: return 0;
     }
 }
