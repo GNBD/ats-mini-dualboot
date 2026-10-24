@@ -141,11 +141,11 @@ esp_err_t si4732_fm_tune_fast(si4732_t *dev, uint32_t freq_hz);
 esp_err_t si4732_am_tune_fast(si4732_t *dev, uint32_t freq_hz,
                               si4732_sideband_t sb);
 
-/** @brief FM_SEEK_START */
-esp_err_t si4732_fm_seek(si4732_t *dev, bool up);
-
-/** @brief AM_SEEK_START */
-esp_err_t si4732_am_seek(si4732_t *dev, bool up);
+/** @brief FM/AM_SEEK_START, ??/??/??? ?? ?? */
+esp_err_t si4732_seek_start(si4732_t *dev, bool up,
+                            uint32_t bottom_hz, uint32_t top_hz,
+                            uint32_t spacing_hz,
+                            uint8_t rssi_threshold, uint8_t snr_threshold);
 
 /** @brief TUNE_STATUS (FM/AM) */
 esp_err_t si4732_tune_status(si4732_t *dev, bool intack, bool cancel,

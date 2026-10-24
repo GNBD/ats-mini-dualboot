@@ -265,7 +265,53 @@ void set_band(int idx)
     mark_change();
 }
 
-/* ------------------------------------------------------------- 탐색 */
+/* ------------------------------------------------------------- ?? */
+
+static bool s_seek_hw_active;
+
+static void seek_draw(void)
+{
+    if (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK) {
+        ui_draw_all(&s_ui);
+    } else {
+        ui_draw_freq(&s_ui);
+        ui_draw_status(&s_ui);
+    }
+}
+
+static esp_err_t seek_hw_start(bool up)
+{
+    const band_desc_t *b = &band_table[s_ui.band_idx];
+    (void)si4732_tune_status(&s_radio, true, false, NULL, NULL, NULL);
+    esp_err_t err = si4732_seek_start(&s_radio, up, b->min_hz, b->max_hz,
+                                      s_sw_step, SEEK_RSSI_MIN, SEEK_SNR_MIN);
+    s_seek_hw_active = (err == ESP_OK);
+    return err;
+}
+
+static esp_err_t seek_hw_cancel(uint32_t *freq_hz)
+{
+    s_seek_hw_active = false;
+    if (!s_radio_ok) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return si4732_tune_status(&s_radio, true, true, freq_hz, NULL, NULL);
+}
+
+static void seek_progress(uint32_t freq)
+{
+    if (s_sw_step == 0 || s_sw_max <= 0) {
+        return;
+    }
+    uint32_t diff = (freq >= s_sw_orig) ? freq - s_sw_orig
+                                        : s_sw_orig - freq;
+    int steps = (int)((diff + s_sw_step / 2) / s_sw_step);
+    if (steps > s_sw_max) {
+        steps = s_sw_max;
+    }
+    s_sw_steps = steps;
+    s_ui.sw_steps = steps;
+}
 
 bool seek_start(bool up)
 {
@@ -287,8 +333,6 @@ bool seek_start(bool up)
             step = 5000;
         }
     }
-    s_sw_rssi = SEEK_RSSI_MIN;
-    s_sw_snr = SEEK_SNR_MIN;
 
     s_sw_step = step;
     s_sw_dir = up ? 1 : -1;
@@ -297,8 +341,6 @@ bool seek_start(bool up)
     s_sw_max = (int)((b->max_hz - b->min_hz) / step) + 1;
     s_ui.sw_steps = 0;
     s_ui.sw_max = s_sw_max;
-    s_sw_waiting = false;
-    s_sw_wait_until = 0;
 
     s_seeking = true;
     s_ui.seeking = true;
@@ -306,11 +348,17 @@ bool seek_start(bool up)
     if (s_radio_ok) {
         si4732_set_mute(&s_radio, true);
     }
-    if (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK) {
-        ui_draw_all(&s_ui);
-    } else {
-        ui_draw_status(&s_ui);
+    if (seek_hw_start(up) != ESP_OK) {
+        s_seeking = false;
+        s_ui.seeking = false;
+        if (s_radio_ok) {
+            si4732_set_mute(&s_radio, false);
+        }
+        toast("SEEK ERR");
+        seek_draw();
+        return false;
     }
+    seek_draw();
     return true;
 }
 
@@ -324,17 +372,22 @@ esp_err_t seek_tune(uint32_t freq)
 
 void seek_finish(bool found)
 {
-    if (s_radio_ok) {
-        si4732_set_mute(&s_radio, false);
-        if (!found) {
+    if (!found) {
+        if (s_seek_hw_active) {
+            seek_hw_cancel(NULL);
+        }
+        if (s_radio_ok) {
             s_ui.freq_hz = s_sw_orig;
             seek_tune(s_ui.freq_hz);
         }
     }
+    s_seek_hw_active = false;
     s_seeking = false;
     s_ui.seeking = false;
+    if (s_radio_ok) {
+        si4732_set_mute(&s_radio, false);
+    }
     if (found) {
-        apply_step_snap();
         mark_change();
         s_freq_dirty = true;
     }
@@ -351,36 +404,15 @@ void seek_finish(bool found)
     }
 }
 
-void seek_end(void)
-{
-    if (!s_seeking) {
-        return;
-    }
-    s_sw_waiting = false;
-    s_seeking = false;
-    s_ui.seeking = false;
-    if (s_radio_ok) {
-        si4732_set_mute(&s_radio, false);
-    }
-    apply_step_snap();
-    mark_change();
-    s_freq_dirty = true;
-    if (s_hmi == HMI_TUNE) {
-        ui_draw_all(&s_ui);
-    } else {
-        ui_draw_freq(&s_ui);
-        ui_draw_status(&s_ui);
-    }
-    toast("SEEK END");
-}
-
 void seek_cancel(void)
 {
+    uint32_t freq = 0;
+    if (s_seek_hw_active) {
+        seek_hw_cancel(&freq);
+    }
     if (s_radio_ok) {
-        if (s_seeking) {
-            s_ui.freq_hz = s_sw_orig;
-            seek_tune(s_ui.freq_hz);
-        }
+        s_ui.freq_hz = s_sw_orig;
+        seek_tune(s_ui.freq_hz);
         si4732_set_mute(&s_radio, false);
     }
     s_seeking = false;
@@ -393,13 +425,18 @@ void seek_stop(void)
     if (!s_seeking) {
         return;
     }
-    s_sw_waiting = false;
+    uint32_t freq = 0;
+    if (s_seek_hw_active) {
+        esp_err_t err = seek_hw_cancel(&freq);
+        if (err == ESP_OK && freq) {
+            s_ui.freq_hz = band_clamp_freq(s_ui.band_idx, freq);
+        }
+    }
     s_seeking = false;
     s_ui.seeking = false;
     if (s_radio_ok) {
         si4732_set_mute(&s_radio, false);
     }
-    apply_step_snap();
     mark_change();
     s_freq_dirty = true;
     if (s_ui.ui_mode != UI_MODE_EASY) {
@@ -421,12 +458,23 @@ void seek_reverse(bool up)
     if (dir == s_sw_dir) {
         return;
     }
+    uint32_t freq = 0;
+    if (s_seek_hw_active) {
+        if (seek_hw_cancel(&freq) != ESP_OK) {
+            seek_finish(false);
+            return;
+        }
+        if (freq) {
+            s_ui.freq_hz = band_clamp_freq(s_ui.band_idx, freq);
+        }
+    }
     s_sw_dir = dir;
-    s_sw_waiting = false;
-    s_sw_wait_until = 0;
     s_sw_steps = 0;
     s_ui.sw_steps = 0;
     s_seek_started = now_ms();
+    if (seek_hw_start(dir) != ESP_OK) {
+        seek_finish(false);
+    }
 }
 
 void seek_poll(uint32_t now)
@@ -434,62 +482,35 @@ void seek_poll(uint32_t now)
     if (!s_seeking) {
         return;
     }
-    if ((uint32_t)(now - s_seek_started) >
-        SEEK_TIMEOUT + (uint32_t)s_sw_max * 80) {
+    if ((uint32_t)(now - s_seek_started) > SEEK_TIMEOUT) {
         seek_finish(false);
         return;
     }
 
-    const band_desc_t *b = &band_table[s_ui.band_idx];
+    uint32_t freq = 0;
+    bool stc = false;
+    bool valid = false;
+    esp_err_t err = si4732_tune_status(&s_radio, true, false,
+                                       &freq, &stc, &valid);
+    if (err != ESP_OK) {
+        return;
+    }
 
-    if (!s_sw_waiting) {
-        if (s_sw_steps >= s_sw_max) {
-            seek_end();
-            return;
+    if (freq) {
+        freq = band_clamp_freq(s_ui.band_idx, freq);
+        if (freq != s_ui.freq_hz) {
+            s_ui.freq_hz = freq;
+            seek_progress(freq);
+            scan_draw_radio();
         }
-        uint32_t f = s_ui.freq_hz;
-        if (s_sw_dir > 0) {
-            if (f > b->max_hz - s_sw_step) {
-                seek_end();
-                return;
-            }
-            f += s_sw_step;
+    }
+    if (stc) {
+        if (valid && freq) {
+            s_ui.freq_hz = freq;
+            seek_finish(true);
         } else {
-            if (f < b->min_hz + s_sw_step) {
-                seek_end();
-                return;
-            }
-            f -= s_sw_step;
-        }
-        s_ui.freq_hz = band_clamp_freq(s_ui.band_idx, f);
-        s_sw_steps++;
-        s_ui.sw_steps = s_sw_steps;
-        if (seek_tune(s_ui.freq_hz) != ESP_OK) {
             seek_finish(false);
-            return;
         }
-        s_sw_wait_until = now + 45;
-        s_sw_waiting = true;
-        return;
-    }
-
-    if ((int32_t)(now - s_sw_wait_until) < 0) {
-        return;
-    }
-
-    si4732_rsq_t r;
-    esp_err_t e = (s_radio.func == SI4732_FUNC_FM)
-                  ? si4732_fm_rsq(&s_radio, &r)
-                  : si4732_am_rsq(&s_radio, &r);
-    bool found = (e == ESP_OK && r.valid &&
-                  r.rssi >= s_sw_rssi && r.snr >= s_sw_snr);
-    if (e == ESP_OK) {
-        scan_rsq_show(&r, !found);
-    }
-    if (found) {
-        seek_finish(true);
-    } else {
-        s_sw_waiting = false;
     }
 }
 

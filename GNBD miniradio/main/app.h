@@ -397,7 +397,6 @@ bool seek_start(bool up);
 esp_err_t seek_tune(uint32_t freq);
 void seek_finish(bool found);
 void seek_cancel(void);
-void seek_end(void);
 void seek_stop(void);
 void seek_reverse(bool up);
 void seek_poll(uint32_t now);

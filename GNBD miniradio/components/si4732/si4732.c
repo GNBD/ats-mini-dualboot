@@ -352,16 +352,84 @@ esp_err_t si4732_am_tune_fast(si4732_t *dev, uint32_t freq_hz,
     return err;
 }
 
-esp_err_t si4732_fm_seek(si4732_t *dev, bool up)
+esp_err_t si4732_seek_start(si4732_t *dev, bool up,
+                            uint32_t bottom_hz, uint32_t top_hz,
+                            uint32_t spacing_hz,
+                            uint8_t rssi_threshold, uint8_t snr_threshold)
 {
-    uint8_t arg = (uint8_t)(SI4732_SEEK_WRAP | (up ? SI4732_SEEK_UP : 0));
-    return si4732_command(dev, SI4732_CMD_FM_SEEK_START, &arg, 1);
-}
+    bool fm = (dev->func == SI4732_FUNC_FM);
+    uint32_t div = fm ? 10000u : 1000u;
+    uint32_t bottom = (bottom_hz + div / 2u) / div;
+    uint32_t top = (top_hz + div / 2u) / div;
+    uint32_t spacing = (spacing_hz + div / 2u) / div;
+    if (spacing < 1u) {
+        spacing = 1u;
+    }
+    if (rssi_threshold > 127u) {
+        rssi_threshold = 127u;
+    }
+    if (snr_threshold > 127u) {
+        snr_threshold = 127u;
+    }
 
-esp_err_t si4732_am_seek(si4732_t *dev, bool up)
-{
+    esp_err_t err;
+    if (fm) {
+        if (bottom < 6400u || top > 10800u || bottom >= top) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        err = si4732_set_property(dev, SI4732_PROP_FM_SEEK_BAND_BOTTOM,
+                                  (uint16_t)bottom);
+        if (err == ESP_OK) {
+            err = si4732_set_property(dev, SI4732_PROP_FM_SEEK_BAND_TOP,
+                                      (uint16_t)top);
+        }
+        if (err == ESP_OK) {
+            err = si4732_set_property(dev, SI4732_PROP_FM_SEEK_FREQ_SPACING,
+                                      (uint16_t)spacing);
+        }
+        if (err == ESP_OK) {
+            err = si4732_set_property(dev,
+                                      SI4732_PROP_FM_SEEK_TUNE_RSSI_THRESHOLD,
+                                      rssi_threshold);
+        }
+        if (err == ESP_OK) {
+            err = si4732_set_property(dev,
+                                      SI4732_PROP_FM_SEEK_TUNE_SNR_THRESHOLD,
+                                      snr_threshold);
+        }
+        if (err != ESP_OK) {
+            return err;
+        }
+        uint8_t arg = (uint8_t)(up ? SI4732_SEEK_UP : 0);
+        return si4732_command(dev, SI4732_CMD_FM_SEEK_START, &arg, 1);
+    }
+
+    if (bottom < 149u || top > 30000u || bottom >= top) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    err = si4732_set_property(dev, SI4732_PROP_AM_SEEK_BAND_BOTTOM,
+                              (uint16_t)bottom);
+    if (err == ESP_OK) {
+        err = si4732_set_property(dev, SI4732_PROP_AM_SEEK_BAND_TOP,
+                                  (uint16_t)top);
+    }
+    if (err == ESP_OK) {
+        err = si4732_set_property(dev, SI4732_PROP_AM_SEEK_FREQ_SPACING,
+                                  (uint16_t)spacing);
+    }
+    if (err == ESP_OK) {
+        err = si4732_set_property(dev, SI4732_PROP_AM_SEEK_RSSI_THRESHOLD,
+                                  rssi_threshold);
+    }
+    if (err == ESP_OK) {
+        err = si4732_set_property(dev, SI4732_PROP_AM_SEEK_SNR_THRESHOLD,
+                                  snr_threshold);
+    }
+    if (err != ESP_OK) {
+        return err;
+    }
     uint8_t args[5] = {
-        (uint8_t)(SI4732_SEEK_WRAP | (up ? SI4732_SEEK_UP : 0)),
+        (uint8_t)(up ? SI4732_SEEK_UP : 0),
         0x00, 0x00, 0x00, 0x00,
     };
     return si4732_command(dev, SI4732_CMD_AM_SEEK_START, args, sizeof(args));
