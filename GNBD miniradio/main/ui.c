@@ -286,7 +286,7 @@ static void draw_status_right(const ui_state_t *s, int right)
     }
 
     if (s->have_battery && s->battery.millivolt > 0 &&
-        s->battery.millivolt <= 3750) {
+        s->battery.millivolt <= 3700) {
         int tw = display_text_width("LOW", DISPLAY_FONT_TINY);
         int tx = cursor - tw;
         if (tx < 0) {
