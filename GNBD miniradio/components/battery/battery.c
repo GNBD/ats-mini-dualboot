@@ -25,8 +25,6 @@ static adc_cali_handle_t         s_cali;
 static bool                      s_cali_ok;
 static adc_channel_t             s_channel;
 static battery_state_t           s_state;
-static uint16_t                  s_charge_ref;
-static uint8_t                   s_charge_score;
 static int16_t                   s_cal_mv;
 static uint16_t                  s_hist[4];
 static uint8_t                   s_hist_n;
@@ -110,21 +108,7 @@ esp_err_t battery_update(battery_state_t *out)
     s_state.millivolt = (uint16_t)avg;
     s_state.percent = mv_to_percent((uint16_t)avg);
     s_state.low = avg < BATT_LOW_MV;
-
-    if (s_charge_ref == 0) {
-        s_charge_ref = (uint16_t)avg;
-    }
-    int rise = (int)avg - (int)s_charge_ref;
-    if (rise >= 10) {
-        if (s_charge_score < 8) {
-            s_charge_score++;
-        }
-        s_charge_ref = (uint16_t)avg;
-    } else if (rise <= -15) {
-        s_charge_score = 0;
-        s_charge_ref = (uint16_t)avg;
-    }
-    s_state.charging = s_charge_score >= 3;
+    s_state.charging = avg >= 4000;
 
     if (out) {
         *out = s_state;
@@ -147,8 +131,6 @@ esp_err_t battery_set_calibration(int16_t offset_mv)
     s_cal_mv = offset_mv;
     s_hist_n = 0;
     s_hist_pos = 0;
-    s_charge_ref = 0;
-    s_charge_score = 0;
     return ESP_OK;
 }
 
