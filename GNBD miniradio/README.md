@@ -1,4 +1,5 @@
 # GNBD miniradio
+⚠️work in progress
 
 <img width="320" height="170" alt="miniradio" src="https://github.com/user-attachments/assets/6efc7f51-b688-4274-865f-c736e9fb025a" />
 
