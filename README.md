@@ -33,8 +33,8 @@ Chrome/Edge에서 열고 → **기기 연결** → (선택) app0/app1 펌웨어 
 
 | 구성 | 스케치 | 대상 하드웨어 | recovery | 웹/OTA | 상태 |
 |---|---|---|---|---|---|
-| 부트 매니저 | `ats-mini-recovery-theme` | N16R8 (16MB) | `0x860000` | O | 테스트됨 |
-| 부트 매니저 | `ats-mini-recovery-lite` | N8R2 (8MB) | `0x660000` | X | **미검증** |
+| 부트 매니저 | `ats-mini-recovery-theme` | N16R8 (16MB) | `0x860000` | O | OK |
+| 부트 매니저 | `ats-mini-recovery-lite` | N8R2 (8MB) | `0x660000` | X | **NOT TEST** |
 
 핵심 규칙 세 가지:
 
