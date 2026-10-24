@@ -1,6 +1,7 @@
 # ATS Mini Dualboot
 
 **미완성 (work in progress)** — 크래시, 부팅 실패, 데이터 손실이 발생할 수 있습니다.
+
 [English](README.en.md)
 
 [miniradio firmware](https://github.com/GNBD/ats-mini-dualboot/tree/main/GNBD%20miniradio)
