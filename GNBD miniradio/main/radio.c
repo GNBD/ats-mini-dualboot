@@ -930,6 +930,9 @@ void battery_poll(uint32_t now)
         last_low = s_batt.low;
         s_ui.battery = s_batt;
         s_ui.have_battery = true;
+        if (changed) {
+            wifi_update_tx_power();
+        }
         if (changed && s_hmi == HMI_TUNE) {
             ui_draw_header(&s_ui);
             ui_draw_status(&s_ui);

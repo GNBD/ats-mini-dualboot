@@ -20,6 +20,39 @@
 static const char *TAG = "wifi";
 static uint8_t s_sta_retry;
 
+#define WIFI_TX_MAX_DBM    14
+#define WIFI_TX_MIN_DBM    5
+#define WIFI_BATT_FULL_MV  4200
+#define WIFI_BATT_EMPTY_MV 3200
+
+static void wifi_tx_power_apply(void)
+{
+    int units = WIFI_TX_MAX_DBM * 4;
+    int mv = s_batt.millivolt;
+    if (mv > 0) {
+        int dbm;
+        if (mv <= WIFI_BATT_EMPTY_MV) {
+            dbm = WIFI_TX_MIN_DBM;
+        } else if (mv >= WIFI_BATT_FULL_MV) {
+            dbm = WIFI_TX_MAX_DBM;
+        } else {
+            dbm = WIFI_TX_MIN_DBM +
+                  ((mv - WIFI_BATT_EMPTY_MV) *
+                   (WIFI_TX_MAX_DBM - WIFI_TX_MIN_DBM) + 500) /
+                      (WIFI_BATT_FULL_MV - WIFI_BATT_EMPTY_MV);
+        }
+        units = dbm * 4;
+    }
+    esp_wifi_set_max_tx_power((int8_t)units);
+}
+
+void wifi_update_tx_power(void)
+{
+    if (s_wifi_started) {
+        wifi_tx_power_apply();
+    }
+}
+
 void sntp_start(void);
 
 void wifi_event_handler(void *arg, esp_event_base_t base,
@@ -106,7 +139,7 @@ esp_err_t wifi_init_once(void)
                                         &wifi_event_handler, NULL, NULL);
     esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                         &wifi_event_handler, NULL, NULL);
-    esp_wifi_set_max_tx_power(56);  /* 14 dBm (0.25 dBm 단위) */
+    wifi_tx_power_apply();
     s_wifi_ready = true;
     return ESP_OK;
 }
@@ -141,7 +174,7 @@ esp_err_t wifi_start_now(void)
 {
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
     esp_wifi_set_ps(WIFI_PS_NONE);
-    esp_wifi_set_max_tx_power(56);
+    wifi_tx_power_apply();
     s_wifi_started = true;
     return ESP_OK;
 }

@@ -374,6 +374,7 @@ esp_err_t http_settings_handler(httpd_req_t *req);
 void http_start(void);
 void http_stop(void);
 void wifi_off(void);
+void wifi_update_tx_power(void);
 esp_err_t wifi_boot(wifi_mode_t mode);
 esp_err_t wifi_start_now(void);
 esp_err_t wifi_start_ap(void);
