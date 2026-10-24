@@ -15,7 +15,7 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저** 저장소입니다. 전원�
 
 ---
 
-## 원클릭 웹 플래셔 (설치 없이 바로)
+## One click web flasher
 ### **<https://gnbdatsmini.netlify.app>**
 ### **<https://gnbd.github.io/ats-mini-dualboot/install.html>**
 ### **<https://gnbd.github.io/ats-mini-dualboot/>**
