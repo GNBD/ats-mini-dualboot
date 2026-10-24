@@ -2896,7 +2896,11 @@ void web_cmd_execute(const web_cmd_t *c)
         audio_set_volume((uint8_t)v);
         s_ui.volume = audio_get_volume();
         mark_change();
-        ui_draw_status(&s_ui);
+        if (s_hmi == HMI_TUNE || s_hmi == HMI_VOL) {
+            open_volume(false);
+        } else {
+            ui_draw_status(&s_ui);
+        }
         break;
     }
 
