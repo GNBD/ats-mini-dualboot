@@ -581,7 +581,7 @@ void ats_start(void)
     s_ui.sw_steps = 0;
     s_ui.sw_max = (int)((b->max_hz - b->min_hz) / s_ats_step) + 1;
     s_ats_timeout_ms = (uint32_t)s_ui.sw_max * 80 + 30000;
-    s_ats_wait = now_ms() + 36;
+    s_ats_wait = now_ms() + 60;
     if (s_hmi == HMI_TUNE) {
         ui_draw_all(&s_ui);
     } else {
@@ -668,7 +668,7 @@ void ats_poll(uint32_t now)
         ats_finish("ATS STOP");
         return;
     }
-    s_ats_wait = now + 36;
+    s_ats_wait = now + 60;
 }
 
 /* ------------------------------------------------------------- 메뉴 */
