@@ -182,10 +182,16 @@ static void battery_pill(int x, int y, const battery_state_t *b)
                                 (uint16_t)fill, 7, 2, col);
     }
     if (b->charging) {
-        display_fill_rect((int16_t)(x + 13), (int16_t)(y + 1), 2, 2, UI_ACC_HI);
-        display_fill_rect((int16_t)(x + 11), (int16_t)(y + 3), 2, 2, UI_ACC_HI);
-        display_fill_rect((int16_t)(x + 9),  (int16_t)(y + 5), 5, 2, UI_ACC_HI);
-        display_fill_rect((int16_t)(x + 9),  (int16_t)(y + 7), 2, 2, UI_ACC_HI);
+        for (int dx = 0; dx < 2; ++dx) {
+            display_draw_line((int16_t)(x + 13 + dx), (int16_t)(y + 1),
+                              (int16_t)(x + 9 + dx), (int16_t)(y + 5), 0xFFFF);
+            display_draw_line((int16_t)(x + 9 + dx), (int16_t)(y + 5),
+                              (int16_t)(x + 12 + dx), (int16_t)(y + 5),
+                              0xFFFF);
+            display_draw_line((int16_t)(x + 12 + dx), (int16_t)(y + 5),
+                              (int16_t)(x + 8 + dx), (int16_t)(y + 9),
+                              0xFFFF);
+        }
     }
 }
 
