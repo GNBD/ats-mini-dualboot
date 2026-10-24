@@ -2,6 +2,7 @@
 
 <img width="320" height="170" alt="miniradio" src="https://github.com/user-attachments/assets/6efc7f51-b688-4274-865f-c736e9fb025a" />
 
+https://gnbdatsmini.netlify.app/
 GNBD miniradio의 **Dual Boot + Theme Version** 펌웨어 소스입니다.
 
 - Product: **GNBD miniradio**
