@@ -16,9 +16,9 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저** 저장소입니다. 전원�
 ---
 
 ## One-click, Web-flasher
-### **<https://gnbdatsmini.netlify.app>**
-### **<https://gnbd.github.io/ats-mini-dualboot/install.html>**
-### **<https://gnbd.github.io/ats-mini-dualboot/>**
+### **<https://gnbdatsmini.netlify.app>** miniradio firmware + bootmanager
+### **<https://gnbd.github.io/ats-mini-dualboot/install.html>** bootmanager
+### **<https://gnbd.github.io/ats-mini-dualboot/>** docs
 
 Chrome/Edge에서 열고 → **기기 연결** → (선택) app0/app1 펌웨어 → 약관 동의 → **Flash!**
 부트 매니저(리커버리)와 앱 펌웨어를 **브라우저에서 바로** 굽습니다. (v4.1.2 DES, 통합 이미지는 자동으로 앱만 추출)
