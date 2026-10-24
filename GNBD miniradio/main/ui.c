@@ -3,8 +3,7 @@
  * Copyright (c) miniradio Contributors
  * Copyright (c) 2026 GNBD
  *
- * iOS / macOS 스타일 메인 UI (320x170).
- *
+ * 
  *   RADIO : 상단 세그먼트 탭 + 주파수 카드 + 상태 바 + S/N 카드 + RDS 카드
  *   MENU  : 라디오 메뉴 (iOS 설정 그룹 리스트)
  *   SET   : 라디오 설정
