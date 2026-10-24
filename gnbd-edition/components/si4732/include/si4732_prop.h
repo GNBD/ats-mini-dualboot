@@ -1,0 +1,121 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) miniradio Contributors
+ *
+ * SI4732 프로퍼티 ID (AN332 Rev 1.0 기준).
+ * SET_PROPERTY / GET_PROPERTY의 16비트 프로퍼티 번호.
+ */
+#pragma once
+
+#include <stdint.h>
+
+/* ---- 공통 / 인터럽트 ---- */
+#define SI4732_PROP_GPO_IEN                 0x0001  /* AM/SSB: 인터럽트 소스 enable */
+
+/* ---- 클럭 (RCLK 사용 시) ---- */
+#define SI4732_PROP_REFCLK_FREQ             0x0201
+#define SI4732_PROP_REFCLK_PRESCALE         0x0202
+
+/* ---- FM 그룹 ---- */
+#define SI4732_PROP_FM_DEEMPHASIS           0x1100  /* 0=50us, 1=75us */
+#define SI4732_PROP_FM_CHANNEL_FILTER       0x1102
+#define SI4732_PROP_FM_BLEND_STEREO_THRESHOLD 0x1105
+#define SI4732_PROP_FM_BLEND_MONO_THRESHOLD   0x1106
+#define SI4732_PROP_FM_BLEND_RSSI_STEREO_THRESHOLD 0x1800
+#define SI4732_PROP_FM_BLEND_RSSI_MONO_THRESHOLD   0x1801
+#define SI4732_PROP_FM_BLEND_SNR_STEREO_THRESHOLD  0x1804
+#define SI4732_PROP_FM_BLEND_SNR_MONO_THRESHOLD    0x1805
+#define SI4732_PROP_FM_BLEND_MULTIPATH_STEREO_THRESHOLD 0x1808
+#define SI4732_PROP_FM_BLEND_MULTIPATH_MONO_THRESHOLD   0x1809
+#define SI4732_PROP_FM_SOFT_MUTE_MAX_ATTENUATION  0x1302
+#define SI4732_PROP_FM_SEEK_BAND_BOTTOM     0x1400  /* 기본 6400 (10 kHz 단위) */
+#define SI4732_PROP_FM_SEEK_BAND_TOP        0x1401  /* 기본 10800 */
+#define SI4732_PROP_FM_SEEK_FREQ_SPACING    0x1402  /* 기본 10 (10 kHz 단위) */
+#define SI4732_PROP_FM_SEEK_TUNE_SNR_THRESHOLD 0x1403
+#define SI4732_PROP_FM_SEEK_TUNE_RSSI_THRESHOLD 0x1404
+#define SI4732_PROP_FM_RDS_INT_SOURCE       0x1500
+#define SI4732_PROP_FM_RDS_INT_FIFO_COUNT   0x1501
+#define SI4732_PROP_FM_RDS_CONFIG           0x1502
+#define SI4732_PROP_FM_RDS_CONFIDENCE       0x1503
+#define SI4732_PROP_FM_DEBUG                0xFF00  /* 0=off, 1=on (factory debug) */
+
+/* ---- SSB (AM 그룹 공용, AN332 Rev 0.8 Amendment) ---- */
+#define SI4732_PROP_SSB_BFO                 0x0100  /* BFO 오프셋, ±16383 Hz */
+#define SI4732_PROP_SSB_MODE                0x0101  /* AUDIOBW/AVC/soft-mute/AFC */
+
+/* ---- AM 그룹 ---- */
+#define SI4732_PROP_AM_DEEMPHASIS           0x3100  /* 50 us, 기본 off */
+#define SI4732_PROP_AM_CHANNEL_FILTER       0x3102  /* 대역폭 선택 (AMCHFLT) */
+#define SI4732_PROP_AM_AUTOMATIC_VOLUME_CONTROL_MAX_GAIN 0x3103  /* AVC 최대 이득 */
+#define SI4732_PROP_AM_MODE_AFC_SW_PULL_IN_RANGE  0x3104
+#define SI4732_PROP_AM_MODE_AFC_SW_LOCK_IN_RANGE  0x3105
+#define SI4732_PROP_AM_RSQ_INTERRUPTS       0x3200
+#define SI4732_PROP_AM_RSQ_SNR_HIGH_THRESHOLD  0x3201
+#define SI4732_PROP_AM_RSQ_SNR_LOW_THRESHOLD   0x3202
+#define SI4732_PROP_AM_RSQ_RSSI_HIGH_THRESHOLD 0x3203
+#define SI4732_PROP_AM_RSQ_RSSI_LOW_THRESHOLD  0x3204
+#define SI4732_PROP_AM_SOFT_MUTE_RATE       0x3300  /* 기본 278 dB/s */
+#define SI4732_PROP_AM_SOFT_MUTE_SLOPE      0x3301
+#define SI4732_PROP_AM_SOFT_MUTE_MAX_ATTENUATION 0x3302  /* dB, 0=비활성, 기본 8 */
+#define SI4732_PROP_AM_SOFT_MUTE_SNR_THRESHOLD   0x3303  /* 기본 8 dB */
+#define SI4732_PROP_AM_SOFT_MUTE_RELEASE_RATE    0x3304
+#define SI4732_PROP_AM_SOFT_MUTE_ATTACK_RATE     0x3305
+#define SI4732_PROP_AM_SEEK_BAND_BOTTOM      0x3400  /* 기본 520 (kHz) */
+#define SI4732_PROP_AM_SEEK_BAND_TOP         0x3401  /* 기본 1710 (kHz) */
+#define SI4732_PROP_AM_SEEK_FREQ_SPACING     0x3402  /* 기본 10 (kHz) */
+#define SI4732_PROP_AM_SEEK_SNR_THRESHOLD    0x3403
+#define SI4732_PROP_AM_SEEK_RSSI_THRESHOLD   0x3404
+#define SI4732_PROP_AM_RF_AGC_ATTACK_RATE    0x3700  /* SSB와 공용 */
+#define SI4732_PROP_AM_RF_AGC_RELEASE_RATE   0x3701
+#define SI4732_PROP_AM_AGC_ATTACK_RATE       0x3702
+#define SI4732_PROP_AM_AGC_RELEASE_RATE      0x3703  /* SSB IF AGC release와 공용 */
+#define SI4732_PROP_AM_FRONTEND_AGC_CONTROL  0x3705  /* 외부 attenuator/LNA */
+#define SI4732_PROP_AM_NB_DETECT_THRESHOLD   0x3900
+#define SI4732_PROP_AM_NB_INTERVAL           0x3901
+#define SI4732_PROP_AM_NB_RATE               0x3902
+#define SI4732_PROP_AM_NB_IIR_FILTER         0x3903
+#define SI4732_PROP_AM_NB_DELAY              0x3904
+
+/* ---- 전역 오디오 ---- */
+#define SI4732_PROP_RX_VOLUME                0x4000  /* 0–63 */
+#define SI4732_PROP_RX_HARD_MUTE             0x4001  /* 0=unmute, 3=mute(L+R) */
+
+/* ---- 프로퍼티 값 정의 ---- */
+
+/* AM_CHANNEL_FILTER (AMCHFLT) — AN332 Rev 1.0:
+ * 0=6k, 1=4k, 2=3k, 3=2k, 4=1k, 5=1.8k, 6=2.5k */
+typedef enum {
+    SI4732_AM_BW_6KHZ   = 0,
+    SI4732_AM_BW_4KHZ   = 1,
+    SI4732_AM_BW_3KHZ   = 2,
+    SI4732_AM_BW_2KHZ   = 3,  /* 기본값 (2 kHz) */
+    SI4732_AM_BW_1KHZ   = 4,
+    SI4732_AM_BW_1K8HZ  = 5,
+    SI4732_AM_BW_2K5HZ  = 6,
+} si4732_am_bandwidth_t;
+
+/* FM_CHANNEL_FILTER (0x1102) — 0=auto */
+typedef enum {
+    SI4732_FM_BW_AUTO    = 0,
+    SI4732_FM_BW_110KHZ  = 1,
+    SI4732_FM_BW_84KHZ   = 2,
+    SI4732_FM_BW_60KHZ   = 3,
+    SI4732_FM_BW_40KHZ   = 4,
+} si4732_fm_bandwidth_t;
+
+/* SSB_MODE.AUDIOBW */
+typedef enum {
+    SI4732_SSB_BW_1K2HZ = 0,  /* 기본 */
+    SI4732_SSB_BW_2K2HZ = 1,
+    SI4732_SSB_BW_3KHZ  = 2,
+    SI4732_SSB_BW_4KHZ  = 3,
+    SI4732_SSB_BW_500HZ = 4,
+    SI4732_SSB_BW_1KHZ  = 5,
+} si4732_ssb_bandwidth_t;
+
+#define SI4732_RX_HARD_MUTE_BOTH   0x0003
+#define SI4732_RX_HARD_MUTE_NONE   0x0000
+
+/* RDS_CONFIG (0x1502): RDSEN=1, 블록 오류 임계 2,2,2,2 (정정 불가 그룹 폐기) */
+#define SI4732_RDS_CONFIG_ENABLE    0x0001
+#define SI4732_RDS_CONFIG_THRESHOLD 0xAAA0

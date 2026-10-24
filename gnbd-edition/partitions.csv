@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MIT
+# ATS Mini 부트매니저와 호환되는 16 MB 파티션 테이블.
+# 앱은 app0(0x10000)에 기록한다.
+# Name,      Type, SubType,  Offset,   Size
+nvs,         data, nvs,      0x9000,   0x5000,
+otadata,     data, ota,      0xe000,   0x2000,
+app0,        app,  ota_0,    0x10000,  0x380000,
+app1,        app,  ota_1,    0x390000, 0x380000,
+ffat,        data, fat,      0x710000, 0x150000,
+recovery,    app,  ota_2,    0x860000, 0x1A0000,
+littlefs,    data, littlefs, 0xA00000, 0x595000,
+rec_settings,data, nvs,      0xF95000, 0x8000,
+settings,    data, nvs,      0xF9D000, 0x20000,
+coredump,    data, coredump, 0xFDF000, 0x20000,
