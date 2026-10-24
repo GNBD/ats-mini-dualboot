@@ -104,6 +104,7 @@ static void power_save_set(bool on)
     }
     cpu_apply(s_cpu_mhz);
     brightness_apply();
+    wifi_update_tx_power();
 }
 #define QUICK_ITEMS 4
 

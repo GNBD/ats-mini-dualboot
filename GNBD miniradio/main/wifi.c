@@ -25,30 +25,69 @@ static uint8_t s_sta_retry;
 #define WIFI_TX_FULL_MV    3700
 #define WIFI_TX_STEP_MV    50
 
-static void wifi_tx_power_apply(void)
+static int s_tx_dbm = WIFI_TX_MAX_DBM;
+static bool s_tx_ps_active;
+
+static int wifi_tx_target(int mv)
 {
-    int units = WIFI_TX_MAX_DBM * 4;
-    int mv = s_batt.millivolt;
-    if (mv > 0) {
-        int dbm = WIFI_TX_MAX_DBM;
-        if (mv < WIFI_TX_FULL_MV) {
-            int steps = (WIFI_TX_FULL_MV - mv + WIFI_TX_STEP_MV - 1) /
-                        WIFI_TX_STEP_MV;
-            dbm = WIFI_TX_MAX_DBM - steps;
-            if (dbm < WIFI_TX_MIN_DBM) {
-                dbm = WIFI_TX_MIN_DBM;
-            }
-        }
-        units = dbm * 4;
+    if (mv >= WIFI_TX_FULL_MV) {
+        return WIFI_TX_MAX_DBM;
     }
-    esp_wifi_set_max_tx_power((int8_t)units);
+    int steps = (WIFI_TX_FULL_MV - mv + WIFI_TX_STEP_MV - 1) /
+                WIFI_TX_STEP_MV;
+    int dbm = WIFI_TX_MAX_DBM - steps;
+    return (dbm < WIFI_TX_MIN_DBM) ? WIFI_TX_MIN_DBM : dbm;
+}
+
+static void wifi_tx_apply(int dbm)
+{
+    s_tx_dbm = dbm;
+    esp_wifi_set_max_tx_power((int8_t)(dbm * 4));
 }
 
 void wifi_update_tx_power(void)
 {
-    if (s_wifi_started) {
-        wifi_tx_power_apply();
+    if (!s_wifi_started) {
+        return;
     }
+    if (!s_power_save) {
+        s_tx_ps_active = false;
+        wifi_tx_apply(WIFI_TX_MAX_DBM);
+        return;
+    }
+
+    int mv = s_batt.millivolt;
+    if (mv <= 0) {
+        s_tx_ps_active = false;
+        wifi_tx_apply(WIFI_TX_MAX_DBM);
+        return;
+    }
+    if (!s_tx_ps_active) {
+        s_tx_ps_active = true;
+        wifi_tx_apply(wifi_tx_target(mv));
+        return;
+    }
+
+    int dbm = s_tx_dbm;
+    while (dbm > WIFI_TX_MIN_DBM) {
+        int drop_at = WIFI_TX_FULL_MV -
+                      (WIFI_TX_MAX_DBM - dbm) * WIFI_TX_STEP_MV - 30;
+        if (mv < drop_at) {
+            dbm--;
+        } else {
+            break;
+        }
+    }
+    while (dbm < WIFI_TX_MAX_DBM) {
+        int rise_at = WIFI_TX_FULL_MV -
+                      (WIFI_TX_MAX_DBM - dbm - 1) * WIFI_TX_STEP_MV + 30;
+        if (mv >= rise_at) {
+            dbm++;
+        } else {
+            break;
+        }
+    }
+    wifi_tx_apply(dbm);
 }
 
 void sntp_start(void);
@@ -137,7 +176,6 @@ esp_err_t wifi_init_once(void)
                                         &wifi_event_handler, NULL, NULL);
     esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                         &wifi_event_handler, NULL, NULL);
-    wifi_tx_power_apply();
     s_wifi_ready = true;
     return ESP_OK;
 }
@@ -172,8 +210,8 @@ esp_err_t wifi_start_now(void)
 {
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
     esp_wifi_set_ps(WIFI_PS_NONE);
-    wifi_tx_power_apply();
     s_wifi_started = true;
+    wifi_update_tx_power();
     return ESP_OK;
 }
 
