@@ -57,7 +57,7 @@ enum {
 enum {
     ST_BACK = 0,
     /* 표시/전원 */
-    ST_BRIGHT, ST_SCREEN, ST_SLEEP,
+    ST_BRIGHT, ST_SCREEN, ST_SLEEP, ST_POWERSAVE,
     /* 표시 형식 */
     ST_UNIT, ST_THEME,
     /* 시계 */
@@ -148,6 +148,7 @@ extern int     s_step_idx[3];
 extern uint8_t s_bw[3];
 extern int32_t s_bfo;
 extern uint8_t s_brightness;
+extern bool    s_power_save;
 extern bool    s_rds_on;
 extern bool    s_stereo_force;
 extern bool    s_deemph_75;

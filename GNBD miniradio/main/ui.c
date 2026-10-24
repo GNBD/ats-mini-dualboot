@@ -32,6 +32,7 @@ extern int32_t  s_bfo;
 extern bool     s_digit_mode;
 extern int      s_digit_place;
 extern uint8_t  s_brightness;
+extern bool     s_power_save;
 extern uint8_t  s_theme;
 extern bool     s_sta_connected;
 extern char     s_ap_pass[9];
@@ -284,6 +285,18 @@ static void draw_status_right(const ui_state_t *s, int right)
         cursor = tx - 6;
     }
 
+    if (s->have_battery && s->battery.millivolt > 0 &&
+        s->battery.millivolt <= 3750) {
+        int tw = display_text_width("LOW", DISPLAY_FONT_TINY);
+        int tx = cursor - tw;
+        if (tx < 0) {
+            tx = 0;
+        }
+        display_draw_text((int16_t)tx, 6, "LOW", DISPLAY_FONT_TINY, UI_WARN,
+                          UI_BG, DISPLAY_DATUM_TL);
+        cursor = tx - 6;
+    }
+
     if (s->wifi_state == 1) {
         int tw = display_text_width("ap", DISPLAY_FONT_TINY);
         display_draw_text((int16_t)(cursor - tw), 6, "ap", DISPLAY_FONT_TINY,
@@ -328,7 +341,12 @@ static void draw_header_tabs(ui_tab_t tab, const ui_state_t *s)
     display_fill_rect(0, 0, UI_W, HDR_H, UI_BG);
 
     if (s) {
-        display_fill_round_rect(5, 7, 2, 8, 1, UI_ACC);
+        if (s_power_save) {
+            display_fill_round_rect(4, 7, 7, 9, 3, UI_OK);
+            display_draw_line(4, 15, 10, 8, UI_BG);
+        } else {
+            display_fill_round_rect(5, 7, 2, 8, 1, UI_ACC);
+        }
         if (s->clock[0]) {
             display_draw_text(12, 6, s->clock, DISPLAY_FONT_TINY, UI_FG, UI_BG,
                               DISPLAY_DATUM_TL);
@@ -364,9 +382,6 @@ static void draw_header_msg(const ui_state_t *s)
         col = UI_MUTED;
     } else if (s->patch_missing) {
         msg = "SSB";
-        col = UI_WARN;
-    } else if (s->have_battery && s->battery.low) {
-        msg = "LOW";
         col = UI_WARN;
     }
     if (s->save_active) {

@@ -689,7 +689,7 @@ const char *const RM_LABELS[RM_COUNT] = {
 
 const char *const ST_LABELS[ST_COUNT] = {
     "< BACK",
-    "BRIGHT", "SCREEN", "SLEEP",
+    "BRIGHT", "SCREEN", "SLEEP", "POWER SAVE",
     "UNIT", "THEME",
     "TIME", "UTC",
     "BATT", "BATT CAL", "CPU", "WI-FI",

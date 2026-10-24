@@ -28,6 +28,7 @@ int     s_step_idx[3] = {-1, -1, -1};
 uint8_t s_bw[3] = {0, 3, 1};
 int32_t s_bfo;
 uint8_t s_brightness = 100;
+bool    s_power_save;
 bool    s_rds_on = true;
 bool    s_stereo_force = false;
 bool    s_deemph_75 = false;

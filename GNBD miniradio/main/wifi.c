@@ -22,24 +22,22 @@ static uint8_t s_sta_retry;
 
 #define WIFI_TX_MAX_DBM    14
 #define WIFI_TX_MIN_DBM    5
-#define WIFI_BATT_FULL_MV  4200
-#define WIFI_BATT_EMPTY_MV 3200
+#define WIFI_TX_FULL_MV    3700
+#define WIFI_TX_STEP_MV    50
 
 static void wifi_tx_power_apply(void)
 {
     int units = WIFI_TX_MAX_DBM * 4;
     int mv = s_batt.millivolt;
     if (mv > 0) {
-        int dbm;
-        if (mv <= WIFI_BATT_EMPTY_MV) {
-            dbm = WIFI_TX_MIN_DBM;
-        } else if (mv >= WIFI_BATT_FULL_MV) {
-            dbm = WIFI_TX_MAX_DBM;
-        } else {
-            dbm = WIFI_TX_MIN_DBM +
-                  ((mv - WIFI_BATT_EMPTY_MV) *
-                   (WIFI_TX_MAX_DBM - WIFI_TX_MIN_DBM) + 500) /
-                      (WIFI_BATT_FULL_MV - WIFI_BATT_EMPTY_MV);
+        int dbm = WIFI_TX_MAX_DBM;
+        if (mv < WIFI_TX_FULL_MV) {
+            int steps = (WIFI_TX_FULL_MV - mv + WIFI_TX_STEP_MV - 1) /
+                        WIFI_TX_STEP_MV;
+            dbm = WIFI_TX_MAX_DBM - steps;
+            if (dbm < WIFI_TX_MIN_DBM) {
+                dbm = WIFI_TX_MIN_DBM;
+            }
         }
         units = dbm * 4;
     }

@@ -80,6 +80,7 @@ static int s_quick_cursor;
 static int64_t s_clock_saved_utc;
 static bool s_opt_quick;
 static bool s_auto_bright;
+static int  s_cpu_saved;
 static bool s_digit_swallow;
 static uint32_t s_input_lock;
 static uint32_t s_overlay_seq;
@@ -90,6 +91,21 @@ static uint32_t s_setup_reboot_ms;
 #define ST_BRIGHT_MENU  0x7E
 #define ST_BRIGHT_LEVEL 0x7F
 static void brightness_apply(void);
+static void power_save_set(bool on)
+{
+    if (on) {
+        if (!s_power_save) {
+            s_cpu_saved = s_cpu_mhz;
+        }
+        s_power_save = true;
+        s_cpu_mhz = 80;
+    } else {
+        s_power_save = false;
+        s_cpu_mhz = (s_cpu_saved >= 80) ? s_cpu_saved : 240;
+    }
+    cpu_apply(s_cpu_mhz);
+    brightness_apply();
+}
 #define QUICK_ITEMS 4
 
 static const ui_app_t g_apps[] = {
@@ -341,12 +357,16 @@ void settings_build(void)
     }
 
     s_sbuf[ST_BACK][0] = 0;
+    unsigned bright_shown = s_brightness;
+    if (s_power_save && bright_shown > 65) {
+        bright_shown = 65;
+    }
     if (s_auto_bright) {
         snprintf(s_sbuf[ST_BRIGHT], sizeof(s_sbuf[ST_BRIGHT]), "AUTO %u%%",
-                 s_brightness);
+                 bright_shown);
     } else {
         snprintf(s_sbuf[ST_BRIGHT], sizeof(s_sbuf[ST_BRIGHT]), "%u%%",
-                 s_brightness);
+                 bright_shown);
     }
     if (s_sleep_min == 0) {
         snprintf(s_sbuf[ST_SLEEP], sizeof(s_sbuf[ST_SLEEP]), "OFF");
@@ -355,6 +375,8 @@ void settings_build(void)
              s_sleep_min);
     }
     snprintf(s_sbuf[ST_CPU], sizeof(s_sbuf[ST_CPU]), "%dMHz", s_cpu_mhz);
+    snprintf(s_sbuf[ST_POWERSAVE], sizeof(s_sbuf[ST_POWERSAVE]), "%s",
+             s_power_save ? "ON" : "OFF");
     snprintf(s_sbuf[ST_UTC], sizeof(s_sbuf[ST_UTC]), "%+d:%02d",
              s_utc_min / 60, abs(s_utc_min % 60));
     snprintf(s_sbuf[ST_WIFI], sizeof(s_sbuf[ST_WIFI]), "%s",
@@ -470,6 +492,7 @@ int opt_sel(int page, int item)
         case ST_BATT:   return (s_batt_view <= 4) ? s_batt_view : 3;
         case ST_BATT_CAL: return s_batt_cal_mv;
         case ST_SCREEN: return s_screen_sec;
+        case ST_POWERSAVE: return s_power_save ? 0 : 1;
         case ST_UNIT:   return s_unit_mode;
         case ST_THEME:  return (s_theme <= 5) ? s_theme : 0;
         case ST_SLEEP:  return s_sleep_min;
@@ -632,6 +655,11 @@ void options_open(int page, int item)
             unit = "m";
             zero = "OFF";
             s_opt.title = "SLEEP";
+            break;
+        case ST_POWERSAVE:
+            opt_label(n++, "ON");
+            opt_label(n++, "OFF");
+            s_opt.title = "POWER SAVE";
             break;
         case ST_UTC:
             slider = true;
@@ -859,6 +887,10 @@ void opt_apply(int page, int item, int idx)
             s_sleep_min = (uint16_t)((idx < 0) ? 0 : (idx > 100 ? 100 : idx));
             mark_change();
             break;
+        case ST_POWERSAVE:
+            power_save_set(idx == 0);
+            mark_change();
+            break;
         case ST_UTC:
             if (idx < -12) { idx = -12; }
             if (idx > 14) { idx = 14; }
@@ -887,7 +919,12 @@ void opt_apply(int page, int item, int idx)
         case ST_CPU:
             if (idx < 0) { idx = 0; }
             if (idx > 2) { idx = 2; }
-            s_cpu_mhz = 80 + idx * 80;
+            if (s_power_save) {
+                s_cpu_saved = 80 + idx * 80;
+                s_cpu_mhz = 80;
+            } else {
+                s_cpu_mhz = 80 + idx * 80;
+            }
             if (cpu_apply(s_cpu_mhz) != ESP_OK) {
                 toast("CPU ERR");
             }
@@ -1167,6 +1204,9 @@ static void brightness_apply(void)
         int y, mo, d, h, mi;
         local_datetime(&y, &mo, &d, &h, &mi);
         level = auto_brightness_level(h, mi);
+    }
+    if (s_power_save && level > 65) {
+        level = 65;
     }
     display_set_backlight_level(level);
 }
@@ -2593,6 +2633,7 @@ void snapshot_fill(void)
     s_cfg.bfo_hz     = (int16_t)s_bfo;
     s_cfg.flags      = (s_rds_on ? 0x01 : 0) |
                        (s_stereo_force ? 0x02 : 0) |
+                       (s_power_save ? 0x04 : 0) |
                        (s_auto_bright ? 0x08 : 0) |
                        ((s_theme & 0x07) << 4);
     s_cfg.deemphasis = s_deemph_75 ? 1 : 0;
@@ -2618,8 +2659,11 @@ void snapshot_fill(void)
         s_ext.squelch_type[i] = s_squelch_type[i];
         s_ext.squelch_thr[i] = s_squelch_thr[i];
     }
-    s_ext.reserved[0] = (uint8_t)((s_cpu_mhz >= 240) ? 2
-                                                    : (s_cpu_mhz >= 160 ? 1 : 0));
+    {
+        int cpu_store = s_power_save ? s_cpu_saved : s_cpu_mhz;
+        s_ext.reserved[0] = (uint8_t)((cpu_store >= 240) ? 2
+                                      : (cpu_store >= 160 ? 1 : 0));
+    }
     s_ext.utc_min = s_utc_min;
     s_ext.reserved2[0] = s_follow_browser ? 1 : 0;
     s_ext.batt_view = s_batt_view;
@@ -2799,6 +2843,7 @@ void restore_settings(const storage_settings_t *cfg)
     }
     s_rds_on = (cfg->flags & 0x01) != 0;
     s_stereo_force = (cfg->flags & 0x02) != 0;
+    s_power_save = (cfg->flags & 0x04) != 0;
     s_deemph_75 = cfg->deemphasis != 0;
     s_sleep_min = cfg->sleep_min;
     s_ui.volume = cfg->volume;
@@ -2836,8 +2881,9 @@ void restore_settings(const storage_settings_t *cfg)
         }
         battery_set_calibration(s_batt_cal_mv);
     }
-    s_cpu_mhz = (s_ext.reserved[0] == 1) ? 160
-              : (s_ext.reserved[0] == 2) ? 240 : 80;
+    s_cpu_saved = (s_ext.reserved[0] == 1) ? 160
+                : (s_ext.reserved[0] == 2) ? 240 : 80;
+    s_cpu_mhz = s_power_save ? 80 : s_cpu_saved;
     s_wifi_mode = (s_ext.wifi_mode <= 2) ? s_ext.wifi_mode : 0;
     snprintf(s_wifi_ssid, sizeof(s_wifi_ssid), "%s", s_ext.wifi_ssid);
     snprintf(s_wifi_pass, sizeof(s_wifi_pass), "%s", s_ext.wifi_pass);
@@ -3523,6 +3569,9 @@ void app_main(void)
     storage_settings_t settings;
     esp_err_t settings_err = storage_load_settings(&settings);
     restore_settings(&settings);
+    if (s_power_save) {
+        cpu_apply(80);
+    }
     {
         bool setup_done = false;
         esp_err_t setup_err = storage_load_setup_done(&setup_done);
