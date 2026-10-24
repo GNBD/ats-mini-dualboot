@@ -1825,6 +1825,27 @@ static void band_meta(const ui_state_t *s, char *buf, size_t n)
     }
 }
 
+static void draw_saved_badges(const ui_state_t *s)
+{
+    char vb[24];
+    snprintf(vb, sizeof(vb), "VOL %u  BRT %u", s->volume, s_brightness);
+    int bx = 312 - display_text_width(vb, DISPLAY_FONT_TINY) - 8;
+    if (bx < 52) {
+        bx = 52;
+    }
+    if (s->ats_slot >= 0) {
+        char a[16];
+        snprintf(a, sizeof(a), "A%d", s->ats_slot + 1);
+        pill(bx - 46, 24, a, 46, UI_BLACK, UI_GOLD);
+        bx -= 52;
+    }
+    if (s->preset_slot >= 0) {
+        char p[16];
+        snprintf(p, sizeof(p), "P%d", s->preset_slot + 1);
+        pill(bx - 46, 24, p, 46, UI_BLACK, UI_ACC);
+    }
+}
+
 void ui_draw_band_meta(const ui_state_t *s)
 {
     display_fill_rect(0, 22, 210, 18, UI_BG);
@@ -1837,6 +1858,7 @@ void ui_draw_band_meta(const ui_state_t *s)
         display_draw_text((int16_t)(12 + mw + 6), 29, "STEREO",
                           DISPLAY_FONT_TINY, UI_OK, UI_BG, DISPLAY_DATUM_TL);
     }
+    draw_saved_badges(s);
 }
 
 static void draw_freq_text(int x, int y, const char *num, display_font_t font,

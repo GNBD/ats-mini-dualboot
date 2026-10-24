@@ -54,6 +54,9 @@ int16_t radio_bfo_value(void)
 
 static uint32_t s_seek_started;
 static uint32_t s_ats_timeout_ms;
+
+#define SEEK_RSSI_MIN 4
+#define SEEK_SNR_MIN  1
 static bool s_ssb_prepare_failed;
 
 static void scan_draw_radio(void)
@@ -284,8 +287,8 @@ bool seek_start(bool up)
             step = 5000;
         }
     }
-    s_sw_rssi = 3;
-    s_sw_snr = 1;
+    s_sw_rssi = SEEK_RSSI_MIN;
+    s_sw_snr = SEEK_SNR_MIN;
 
     s_sw_step = step;
     s_sw_dir = up ? 1 : -1;
@@ -622,7 +625,7 @@ void ats_poll(uint32_t now)
             esp_err_t e = (s_ui.mode == RADIO_MODE_FM)
                           ? si4732_fm_rsq(&s_radio, &r)
                           : si4732_am_rsq(&s_radio, &r);
-            good = (e == ESP_OK && r.valid && r.rssi >= 3 && r.snr >= 1);
+            good = (e == ESP_OK && r.valid && r.rssi >= SEEK_RSSI_MIN && r.snr >= SEEK_SNR_MIN);
             if (e == ESP_OK) {
                 scan_rsq_show(&r, !good);
             }
