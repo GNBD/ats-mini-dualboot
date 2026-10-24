@@ -1,9 +1,8 @@
-# GNBD Edition
+# GNBD miniradio
 
-GNBD miniradio의 **Dual Boot + Theme Version** 에디션 펌웨어 소스입니다.
+GNBD miniradio의 **Dual Boot + Theme Version** 펌웨어 소스입니다.
 
 - Product: **GNBD miniradio**
-- Edition: **GNBD Edition**
 - Build: **Dual Boot + Theme Version**
 - Firmware version: **1.0.2**
 - Target: **ESP32-S3 N16R8 + SI4732**
