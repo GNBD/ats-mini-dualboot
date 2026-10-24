@@ -1,7 +1,5 @@
 # ATS Mini Dualboot
 
-> [GNBD miniradio landing page](https://gnbdatsmini.netlify.app/)
-
 **미완성 (work in progress)** — 크래시, 부팅 실패, 데이터 손실이 발생할 수 있습니다.
 [English](README.en.md)
 
@@ -18,6 +16,7 @@ SI4732 (ESP32-S3) 수신기용 **부트 매니저** 저장소입니다. 전원�
 ---
 
 ## 원클릭 웹 플래셔 (설치 없이 바로)
+### **<https://gnbdatsmini.netlify.app>**
 ### **<https://gnbd.github.io/ats-mini-dualboot/install.html>**
 ### **<https://gnbd.github.io/ats-mini-dualboot/>**
 
