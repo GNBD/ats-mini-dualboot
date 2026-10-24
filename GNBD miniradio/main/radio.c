@@ -57,6 +57,10 @@ static uint32_t s_ats_timeout_ms;
 
 #define SEEK_RSSI_MIN 4
 #define SEEK_SNR_MIN  1
+#define SEEK_FM_RSSI_MIN 8
+#define SEEK_FM_SNR_MIN  3
+#define SEEK_AM_RSSI_MIN 8
+#define SEEK_AM_SNR_MIN  2
 static bool s_ssb_prepare_failed;
 
 static void scan_draw_radio(void)
@@ -282,9 +286,12 @@ static void seek_draw(void)
 static esp_err_t seek_hw_start(bool up)
 {
     const band_desc_t *b = &band_table[s_ui.band_idx];
+    bool fm = (s_ui.mode == RADIO_MODE_FM);
+    uint8_t rssi = fm ? SEEK_FM_RSSI_MIN : SEEK_AM_RSSI_MIN;
+    uint8_t snr = fm ? SEEK_FM_SNR_MIN : SEEK_AM_SNR_MIN;
     (void)si4732_tune_status(&s_radio, true, false, NULL, NULL, NULL);
     esp_err_t err = si4732_seek_start(&s_radio, up, b->min_hz, b->max_hz,
-                                      s_sw_step, SEEK_RSSI_MIN, SEEK_SNR_MIN);
+                                      s_sw_step, rssi, snr);
     s_seek_hw_active = (err == ESP_OK);
     return err;
 }
