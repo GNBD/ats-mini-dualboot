@@ -149,7 +149,8 @@ esp_err_t si4732_seek_start(si4732_t *dev, bool up,
 
 /** @brief TUNE_STATUS (FM/AM) */
 esp_err_t si4732_tune_status(si4732_t *dev, bool intack, bool cancel,
-                             uint32_t *freq_hz, bool *stc, bool *valid);
+                             uint32_t *freq_hz, bool *stc, bool *valid,
+                             bool *bltf);
 
 /** @brief FM 채널 필터 (0=auto, 1=110k, 2=84k, 3=60k, 4=40 kHz) */
 esp_err_t si4732_set_fm_bandwidth(si4732_t *dev, uint8_t code);

@@ -57,10 +57,11 @@ static uint32_t s_ats_timeout_ms;
 
 #define SEEK_RSSI_MIN 4
 #define SEEK_SNR_MIN  1
-#define SEEK_FM_RSSI_MIN 8
-#define SEEK_FM_SNR_MIN  3
-#define SEEK_AM_RSSI_MIN 8
-#define SEEK_AM_SNR_MIN  2
+#define SEEK_FM_RSSI_MIN 5
+#define SEEK_FM_SNR_MIN  1
+#define SEEK_AM_RSSI_MIN 10
+#define SEEK_AM_SNR_MIN  1
+#define SEEK_COMPLETE_GRACE_MS 100
 static bool s_ssb_prepare_failed;
 
 static void scan_draw_radio(void)
@@ -257,7 +258,12 @@ void set_band(int idx)
     }
 
     s_ui.band_idx = idx;
-    s_ui.mode = band_table[idx].default_mode;
+    const band_desc_t *b = &band_table[idx];
+    if (b->default_mode == RADIO_MODE_FM) {
+        s_ui.mode = RADIO_MODE_FM;
+    } else if (s_ui.mode == RADIO_MODE_FM || !b->ham) {
+        s_ui.mode = RADIO_MODE_AM;
+    }
     uint32_t f = ((size_t)idx < 16 && s_band_mem_valid[idx])
                  ? s_band_freq[idx] : band_table[idx].min_hz;
     s_ui.freq_hz = band_clamp_freq(idx, f);
@@ -272,6 +278,7 @@ void set_band(int idx)
 /* ------------------------------------------------------------- ?? */
 
 static bool s_seek_hw_active;
+static uint32_t s_seek_log_ms;
 
 static void seek_draw(void)
 {
@@ -289,10 +296,14 @@ static esp_err_t seek_hw_start(bool up)
     bool fm = (s_ui.mode == RADIO_MODE_FM);
     uint8_t rssi = fm ? SEEK_FM_RSSI_MIN : SEEK_AM_RSSI_MIN;
     uint8_t snr = fm ? SEEK_FM_SNR_MIN : SEEK_AM_SNR_MIN;
-    (void)si4732_tune_status(&s_radio, true, false, NULL, NULL, NULL);
+    (void)si4732_tune_status(&s_radio, true, false, NULL, NULL, NULL, NULL);
+    ESP_LOGI(TAG, "seek start fm=%d up=%d f=%lu step=%lu thr=%u/%u",
+             (int)fm, (int)up, (unsigned long)s_ui.freq_hz,
+             (unsigned long)s_sw_step, rssi, snr);
     esp_err_t err = si4732_seek_start(&s_radio, up, b->min_hz, b->max_hz,
                                       s_sw_step, rssi, snr);
     s_seek_hw_active = (err == ESP_OK);
+    ESP_LOGI(TAG, "seek cmd err=%s", esp_err_to_name(err));
     return err;
 }
 
@@ -302,7 +313,7 @@ static esp_err_t seek_hw_cancel(uint32_t *freq_hz)
     if (!s_radio_ok) {
         return ESP_ERR_INVALID_STATE;
     }
-    return si4732_tune_status(&s_radio, true, true, freq_hz, NULL, NULL);
+    return si4732_tune_status(&s_radio, true, true, freq_hz, NULL, NULL, NULL);
 }
 
 static void seek_progress(uint32_t freq)
@@ -352,6 +363,7 @@ bool seek_start(bool up)
     s_seeking = true;
     s_ui.seeking = true;
     s_seek_started = now_ms();
+    s_seek_log_ms = 0;
     if (s_radio_ok) {
         si4732_set_mute(&s_radio, true);
     }
@@ -462,9 +474,6 @@ void seek_reverse(bool up)
         return;
     }
     int dir = up ? 1 : -1;
-    if (dir == s_sw_dir) {
-        return;
-    }
     uint32_t freq = 0;
     if (s_seek_hw_active) {
         if (seek_hw_cancel(&freq) != ESP_OK) {
@@ -476,6 +485,7 @@ void seek_reverse(bool up)
         }
     }
     s_sw_dir = dir;
+    s_sw_orig = s_ui.freq_hz;
     s_sw_steps = 0;
     s_ui.sw_steps = 0;
     s_seek_started = now_ms();
@@ -497,10 +507,20 @@ void seek_poll(uint32_t now)
     uint32_t freq = 0;
     bool stc = false;
     bool valid = false;
+    bool bltf = false;
     esp_err_t err = si4732_tune_status(&s_radio, true, false,
-                                       &freq, &stc, &valid);
+                                       &freq, &stc, &valid, &bltf);
     if (err != ESP_OK) {
+        if ((int32_t)(now - s_seek_log_ms) >= 0) {
+            ESP_LOGW(TAG, "seek status err=%s", esp_err_to_name(err));
+            s_seek_log_ms = now + 250;
+        }
         return;
+    }
+    if (stc || (int32_t)(now - s_seek_log_ms) >= 0) {
+        ESP_LOGI(TAG, "seek poll stc=%d valid=%d bltf=%d f=%lu",
+                 (int)stc, (int)valid, (int)bltf, (unsigned long)freq);
+        s_seek_log_ms = now + 250;
     }
 
     if (freq) {
@@ -511,13 +531,23 @@ void seek_poll(uint32_t now)
             scan_draw_radio();
         }
     }
-    if (stc) {
-        if (valid && freq) {
-            s_ui.freq_hz = freq;
-            seek_finish(true);
-        } else {
-            seek_finish(false);
-        }
+
+    /* VALID can still be set from the previous tune while the seek is
+       starting. Wait for the seek/tune complete interrupt, or fall back to
+       VALID/BLTF after the chip has had time to start scanning. */
+    bool done = stc;
+    if (!done && (uint32_t)(now - s_seek_started) >= SEEK_COMPLETE_GRACE_MS &&
+        (valid || bltf)) {
+        done = true;
+    }
+    if (!done) {
+        return;
+    }
+    if (valid && freq) {
+        s_ui.freq_hz = freq;
+        seek_finish(true);
+    } else {
+        seek_finish(false);
     }
 }
 
@@ -802,11 +832,9 @@ void fmt_freq_short(uint32_t hz, int mode, char *buf, size_t n)
 void rsq_poll(uint32_t now)
 {
     static uint32_t last;
-    bool fast = (s_ui.ui_mode != UI_MODE_EASY) &&
-                (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK);
+    bool fast = (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK);
     uint32_t period = fast ? 30u : (uint32_t)RSQ_PERIOD;
-    if (!s_radio_ok || s_seeking || s_ats == ATS_SEEK ||
-        (now - last) < period) {
+    if (!s_radio_ok || s_ats == ATS_SEEK || (now - last) < period) {
         return;
     }
     last = now;
@@ -819,9 +847,18 @@ void rsq_poll(uint32_t now)
         return;
     }
 
-    /* ??? EMA ??? */
+    /* EMA (시크 중에는 원시값을 그대로 표시) */
     static float ema_rssi = -1.0f;
     static float ema_snr = -1.0f;
+    if (s_seeking) {
+        ema_rssi = (float)r.rssi;
+        ema_snr = (float)r.snr;
+        s_ui.rsq = r;
+        s_ui.have_rsq = true;
+        s_ui.stereo = r.stereo;
+        ui_draw_adv_signal4b(&s_ui);
+        return;
+    }
     if (ema_rssi < 0.0f) {
         ema_rssi = (float)r.rssi;
         ema_snr = (float)r.snr;
@@ -946,15 +983,12 @@ void battery_poll(uint32_t now)
     if (battery_update(&s_batt) == ESP_OK) {
         static int last_pct = -1;
         static int last_mv = -1;
-        static int last_charging = -1;
         static int last_low = -1;
         int mv = s_batt.millivolt / 10;
         bool changed = (s_batt.percent != last_pct || mv != last_mv ||
-                        (int)s_batt.charging != last_charging ||
                         (int)s_batt.low != last_low);
         last_pct = s_batt.percent;
         last_mv = mv;
-        last_charging = s_batt.charging;
         last_low = s_batt.low;
         s_ui.battery = s_batt;
         s_ui.have_battery = true;

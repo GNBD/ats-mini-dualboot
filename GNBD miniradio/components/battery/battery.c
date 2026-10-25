@@ -16,9 +16,9 @@ static const char *TAG = "battery";
 
 #define BATT_ADC_ATTEN   ADC_ATTEN_DB_12
 #define BATT_DIVIDER     2.0f    /* 1:1 분압 (필요 시 보정) */
-#define BATT_LOW_MV      3400
-#define BATT_EMPTY_MV    3200
-#define BATT_FULL_MV     4200
+#define BATT_LOW_MV      3550
+#define BATT_EMPTY_MV    3500
+#define BATT_FULL_MV     4000
 
 static adc_oneshot_unit_handle_t s_unit;
 static adc_cali_handle_t         s_cali;
@@ -62,8 +62,10 @@ static uint8_t mv_to_percent(uint16_t mv)
 {
     if (mv >= BATT_FULL_MV) return 100;
     if (mv <= BATT_EMPTY_MV) return 0;
-    return (uint8_t)((uint32_t)(mv - BATT_EMPTY_MV) * 100 /
-                     (BATT_FULL_MV - BATT_EMPTY_MV));
+    if (mv >= 3900) {
+        return (uint8_t)(90 + (uint32_t)(mv - 3900) * 10 / 100);
+    }
+    return (uint8_t)((uint32_t)(mv - BATT_EMPTY_MV) * 90 / 400);
 }
 
 esp_err_t battery_update(battery_state_t *out)
@@ -108,7 +110,6 @@ esp_err_t battery_update(battery_state_t *out)
     s_state.millivolt = (uint16_t)avg;
     s_state.percent = mv_to_percent((uint16_t)avg);
     s_state.low = avg < BATT_LOW_MV;
-    s_state.charging = avg >= 4000;
 
     if (out) {
         *out = s_state;

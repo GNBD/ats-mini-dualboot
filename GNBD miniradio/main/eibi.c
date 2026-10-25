@@ -460,23 +460,125 @@ int64_t eibi_utc_now(void)
     return s_clock_base + (int64_t)((now_ms() - s_clock_ms0) / 1000);
 }
 
+typedef struct {
+    uint16_t freq_khz;
+    uint8_t  tol_khz;
+    const char *name;
+} activity_entry_t;
+
+static const activity_entry_t s_activity[] = {
+    {  1840, 1, "FT8" },
+    {  3573, 1, "FT8" },
+    {  5357, 1, "FT8" },
+    {  7074, 1, "FT8" },
+    { 10136, 1, "FT8" },
+    { 14074, 1, "FT8" },
+    { 18100, 1, "FT8" },
+    { 21074, 1, "FT8" },
+    { 24915, 1, "FT8" },
+    { 28074, 1, "FT8" },
+    {  3575, 1, "FT4" },
+    {  7047, 1, "FT4" },
+    { 10140, 1, "FT4" },
+    { 14080, 1, "FT4" },
+    { 18104, 1, "FT4" },
+    { 21140, 1, "FT4" },
+    { 24919, 1, "FT4" },
+    { 28180, 1, "FT4" },
+    {  1842, 1, "JS8" },
+    {  3578, 1, "JS8" },
+    {  7078, 1, "JS8" },
+    { 10130, 1, "JS8" },
+    { 14078, 1, "JS8" },
+    { 18078, 1, "JS8" },
+    { 21078, 1, "JS8" },
+    { 24922, 1, "JS8" },
+    { 28078, 1, "JS8" },
+    {  3730, 2, "SSTV" },
+    {  7171, 2, "SSTV" },
+    { 14230, 2, "SSTV" },
+    { 21340, 2, "SSTV" },
+    { 28680, 2, "SSTV" },
+    { 29600, 2, "10m FM" },
+};
+
+static const uint16_t s_cb_khz[40] = {
+    26965, 26975, 26985, 27005, 27015, 27025, 27035, 27055, 27065, 27075,
+    27085, 27105, 27115, 27125, 27135, 27155, 27165, 27175, 27185, 27205,
+    27215, 27225, 27255, 27235, 27245, 27265, 27275, 27285, 27295, 27305,
+    27315, 27325, 27335, 27345, 27355, 27365, 27375, 27385, 27395, 27405,
+};
+
+static void activity_append(char *out, size_t n, const char *name, int *count)
+{
+    size_t used = strlen(out);
+    if (used) {
+        if (used + 3 >= n) {
+            return;
+        }
+        strncat(out, " / ", n - used - 1);
+        used += 3;
+    }
+    if (used >= n) {
+        return;
+    }
+    strncat(out, name, n - used - 1);
+    (*count)++;
+}
+
+static int activity_lookup(uint16_t freq, char *out, size_t n)
+{
+    int count = 0;
+    for (size_t i = 0; i < sizeof(s_activity) / sizeof(s_activity[0]); ++i) {
+        int diff = (int)freq - (int)s_activity[i].freq_khz;
+        if (diff < 0) {
+            diff = -diff;
+        }
+        if (diff <= (int)s_activity[i].tol_khz) {
+            activity_append(out, n, s_activity[i].name, &count);
+        }
+    }
+    if (freq >= 26965u && freq <= 27405u) {
+        for (int i = 0; i < 40; ++i) {
+            int diff = (int)freq - (int)s_cb_khz[i];
+            if (diff < 0) {
+                diff = -diff;
+            }
+            if (diff <= 4) {
+                char label[20];
+                if (i == 8) {
+                    snprintf(label, sizeof(label), "CB CH9 EMERG");
+                } else if (i == 18) {
+                    snprintf(label, sizeof(label), "CB CH19 CALL");
+                } else {
+                    snprintf(label, sizeof(label), "CB CH%d", i + 1);
+                }
+                activity_append(out, n, label, &count);
+                break;
+            }
+        }
+    }
+    return count;
+}
+
 int eibi_lookup(uint16_t freq, int64_t utc, char *out, size_t n)
 {
     out[0] = '\0';
+    int count = activity_lookup(freq, out, n);
     if (utc <= 0) {
-        return 0;
+        return count;
     }
     FILE *f = fopen(EIBI_BIN, "rb");
     if (!f) {
-        return 0;
+        return count;
     }
     if (!eibi_header_ok(f)) {
         fclose(f);
-        return 0;
+        return count;
     }
     if (fseek(f, 0, SEEK_END) != 0) {
         fclose(f);
-        return 0;
+        return count;
     }
     long size = ftell(f);
     long total = (size - (long)sizeof(eibi_file_hdr_t)) /
@@ -484,7 +586,6 @@ int eibi_lookup(uint16_t freq, int64_t utc, char *out, size_t n)
     long lo = 0;
     long hi = total > 0 ? total : 0;
     eibi_rec_t rec;
-    int count = 0;
 
     while (lo < hi) {
         long mid = (lo + hi) / 2;
@@ -522,6 +623,86 @@ int eibi_lookup(uint16_t freq, int64_t utc, char *out, size_t n)
             }
             strncat(out, rec.name, n - strlen(out) - 1);
             ++count;
+        }
+    }
+    fclose(f);
+    return count;
+}
+
+static void eibi_trim(char *s)
+{
+    size_t n = strlen(s);
+    while (n > 0 && (s[n - 1] == ' ' || s[n - 1] == '\t' ||
+                     s[n - 1] == '\r' || s[n - 1] == '\n')) {
+        s[--n] = '\0';
+    }
+}
+
+int eibi_lookup_entries(uint16_t freq, int64_t utc, eibi_entry_t *out, int max)
+{
+    if (!out || max <= 0 || utc <= 0) {
+        return 0;
+    }
+    FILE *f = fopen(EIBI_BIN, "rb");
+    if (!f) {
+        return 0;
+    }
+    if (!eibi_header_ok(f)) {
+        fclose(f);
+        return 0;
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return 0;
+    }
+    long size = ftell(f);
+    long total = (size - (long)sizeof(eibi_file_hdr_t)) /
+                 (long)sizeof(eibi_rec_t);
+    long lo = 0;
+    long hi = total > 0 ? total : 0;
+    eibi_rec_t rec;
+
+    while (lo < hi) {
+        long mid = (lo + hi) / 2;
+        long off = (long)sizeof(eibi_file_hdr_t) +
+                   mid * (long)sizeof(rec);
+        if (fseek(f, off, SEEK_SET) != 0) {
+            break;
+        }
+        if (fread(&rec, sizeof(rec), 1, f) != 1) {
+            break;
+        }
+        if (rec.freq < freq) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    long off = (long)sizeof(eibi_file_hdr_t) + lo * (long)sizeof(rec);
+    int count = 0;
+    if (fseek(f, off, SEEK_SET) == 0) {
+        while (fread(&rec, sizeof(rec), 1, f) == 1 && rec.freq == freq) {
+            if (!eibi_day_match(&rec, utc)) {
+                continue;
+            }
+            char raw[33];
+            memcpy(raw, rec.name, 32);
+            raw[32] = '\0';
+            eibi_entry_t e;
+            memset(&e, 0, sizeof(e));
+            memcpy(e.station, raw, 25);
+            memcpy(e.lang, raw + 25, 4);
+            memcpy(e.target, raw + 29, 3);
+            eibi_trim(e.station);
+            eibi_trim(e.lang);
+            eibi_trim(e.target);
+            if (e.station[0] == '\0') {
+                continue;
+            }
+            if (count < max) {
+                out[count++] = e;
+            }
         }
     }
     fclose(f);

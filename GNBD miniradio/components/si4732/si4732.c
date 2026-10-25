@@ -430,14 +430,16 @@ esp_err_t si4732_seek_start(si4732_t *dev, bool up,
     }
     uint8_t args[5] = {
         (uint8_t)(up ? SI4732_SEEK_UP : 0),
-        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00,
+        (uint8_t)(bottom > 1800u ? 1u : 0u),
     };
     return si4732_command(dev, SI4732_CMD_AM_SEEK_START, args, sizeof(args));
 }
 
 /* TUNE_STATUS: FM=0x22, AM=0x42. ?�답 8바이??STATUS ?�함) */
 esp_err_t si4732_tune_status(si4732_t *dev, bool intack, bool cancel,
-                             uint32_t *freq_hz, bool *stc, bool *valid)
+                             uint32_t *freq_hz, bool *stc, bool *valid,
+                             bool *bltf)
 {
     uint8_t cmd = (dev->func == SI4732_FUNC_FM) ? SI4732_CMD_FM_TUNE_STATUS
                                                 : SI4732_CMD_AM_TUNE_STATUS;
@@ -463,6 +465,9 @@ esp_err_t si4732_tune_status(si4732_t *dev, bool intack, bool cancel,
     }
     if (valid) {
         *valid = (buf[1] & 0x01) != 0; /* RESP1 VALID */
+    }
+    if (bltf) {
+        *bltf = (buf[1] & 0x80) != 0;  /* RESP1 BLTF */
     }
     if (freq_hz) {
         uint32_t units = ((uint32_t)buf[2] << 8) | buf[3];   /* READFREQ */

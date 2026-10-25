@@ -54,6 +54,7 @@
 #include "battery.h"
 #include "rds.h"
 #include "app.h"
+#include "decode.h"
 #include "weather.h"
 
 static const char *TAG = "main";
@@ -430,8 +431,27 @@ void opt_label(int i, const char *text)
     if (i < 0 || i >= UI_OPT_MAX) {
         return;
     }
-    snprintf(s_opt_buf[i], sizeof(s_opt_buf[i]), "%s", text ? text : "");
+    snprintf(s_opt_buf[i], sizeof(s_opt_buf[i]), "%.*s",
+             (int)sizeof(s_opt_buf[i]) - 1, text ? text : "");
     s_opt_ptr[i] = s_opt_buf[i];
+}
+
+static void fmt_mhz(uint32_t hz, char *out, size_t n)
+{
+    uint32_t whole = hz / 1000000u;
+    uint32_t frac = (hz / 1000u) % 1000u;
+    if (frac == 0) {
+        snprintf(out, n, "%lu", (unsigned long)whole);
+    } else if ((frac % 100u) == 0) {
+        snprintf(out, n, "%lu.%lu", (unsigned long)whole,
+                 (unsigned long)(frac / 100u));
+    } else if ((frac % 10u) == 0) {
+        snprintf(out, n, "%lu.%02lu", (unsigned long)whole,
+                 (unsigned long)(frac / 10u));
+    } else {
+        snprintf(out, n, "%lu.%03lu", (unsigned long)whole,
+                 (unsigned long)frac);
+    }
 }
 
 static const uint8_t BW_ORDER[3][7] = {
@@ -527,7 +547,14 @@ void options_open(int page, int item)
         switch (item) {
         case RM_BAND:
             for (size_t i = 0; i < band_count && n < UI_OPT_MAX; ++i) {
-                opt_label(n++, band_table[i].name);
+                const band_desc_t *b = &band_table[i];
+                char lo[12];
+                char hi[12];
+                char lbl[48];
+                fmt_mhz(b->min_hz, lo, sizeof(lo));
+                fmt_mhz(b->max_hz, hi, sizeof(hi));
+                snprintf(lbl, sizeof(lbl), "%.8s\t%s~%s", b->name, lo, hi);
+                opt_label(n++, lbl);
             }
             s_opt.title = "BAND";
             break;
@@ -2020,6 +2047,10 @@ void options_move(int d)
 
 void tune_commit(uint32_t now)
 {
+    if (s_seeking || s_ats == ATS_SEEK) {
+        s_pending_steps = 0;
+        return;
+    }
     if (s_pending_steps == 0) {
         return;
     }
@@ -2179,22 +2210,35 @@ void on_encoder(int d)
         s_nav_ms = now;
         options_move(d);
         break;
-    case HMI_SEEK:
+    case HMI_DECODE:
+        decode_cycle_gpio(d);
+        ui_decode_refresh();
+        break;
+    case HMI_SEEK: {
         if (!s_radio_ok) {
             break;
         }
-        if (band_is_ssb(s_ui.mode)) {
-            toast("SEEK: FM/AM ONLY");
+        bool pressed = gpio_get_level((gpio_num_t)BOARD_ENC_PUSH_GPIO) == 0;
+        if (pressed || band_is_ssb(s_ui.mode)) {
+            /* ats-mini와 동일: 시크 모드에서도 눌러서 회전하면 수동 튜닝,
+               SSB는 시크 대신 가속 스텝 튜닝 */
+            if (s_seeking) {
+                seek_stop();
+            }
+            s_pending_steps += accel_counts(d);
+            if ((now - s_last_tune_ms) >= TUNE_COALESCE_MS) {
+                tune_commit(now);
+                ui_draw_radio_freq(&s_ui);
+            }
             break;
         }
         if (s_seeking) {
-            if ((d > 0) != (s_sw_dir > 0)) {
-                seek_reverse(d > 0);
-            }
+            seek_reverse(d > 0);
             break;
         }
         seek_start(d > 0);
         break;
+    }
     case HMI_WIFIAPP:
         s_nav_ms = now;
         s_wifi_cursor = wrap(s_wifi_cursor + d, 4);
@@ -2444,6 +2488,18 @@ void on_button(bool long_press)
         }
         return;
     }
+    if (s_hmi == HMI_DECODE) {
+        if (long_press) {
+            decode_stop();
+            s_hmi = HMI_TUNE;
+            s_nav_ms = now;
+            page_radio();
+        } else {
+            decode_cycle_mode();
+            ui_decode_refresh();
+        }
+        return;
+    }
     if (s_ats == ATS_SEEK) {
         ats_cancel();
         return;
@@ -2557,6 +2613,7 @@ void on_button(bool long_press)
         options_close(!long_press);
         break;
     case HMI_SEEK:
+    case HMI_DECODE:
         break;
     case HMI_WIFIAPP:
     case HMI_SCANNING:
@@ -3802,6 +3859,9 @@ void app_main(void)
         }
         seek_poll(now);
         ats_poll(now);
+        if (s_hmi == HMI_DECODE && decode_poll(now)) {
+            ui_decode_refresh();
+        }
         {
             static ats_state_t s_prev_ats = ATS_IDLE;
             bool just_done = (s_prev_ats == ATS_SEEK && s_ats == ATS_DONE);
@@ -4021,7 +4081,8 @@ void app_main(void)
         display_flush();
 
         if (s_ui.ui_mode != UI_MODE_EASY &&
-            (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK)) {
+            (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK ||
+             s_hmi == HMI_DECODE)) {
             vTaskDelay(TICK_MS(10));
         } else {
             vTaskDelay(TICK_MS(20));

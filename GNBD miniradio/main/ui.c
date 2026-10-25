@@ -3,7 +3,8 @@
  * Copyright (c) miniradio Contributors
  * Copyright (c) 2026 GNBD
  *
- * 
+ * iOS / macOS 스타일 메인 UI (320x170).
+ *
  *   RADIO : 상단 세그먼트 탭 + 주파수 카드 + 상태 바 + S/N 카드 + RDS 카드
  *   MENU  : 라디오 메뉴 (iOS 설정 그룹 리스트)
  *   SET   : 라디오 설정
@@ -16,6 +17,7 @@
 #include "display.h"
 #include "ui.h"
 #include "eibi.h"
+#include "decode.h"
 
 /* DX 화면용 상태 (app.h의 bw_label/mode_str와 이름 충돌 회피) */
 extern bool     s_agc_on;
@@ -56,6 +58,7 @@ static int64_t  s_eibi_utc_min = -1;
 static char     s_eibi_name[96];
 extern int16_t  s_utc_min;
 extern int      s_cpu_mhz;
+extern uint32_t now_ms(void);
 extern uint16_t s_quick_mask;
 extern const char *const QA_LABELS[];
 #define UI_QUICK_MAX 6
@@ -179,18 +182,6 @@ static void battery_pill(int x, int y, const battery_state_t *b)
     if (fill > 0) {
         display_fill_round_rect((int16_t)(x + 2), (int16_t)(y + 2),
                                 (uint16_t)fill, 7, 2, col);
-    }
-    if (b->charging) {
-        for (int dx = 0; dx < 2; ++dx) {
-            display_draw_line((int16_t)(x + 13 + dx), (int16_t)(y + 1),
-                              (int16_t)(x + 9 + dx), (int16_t)(y + 5), 0xFFFF);
-            display_draw_line((int16_t)(x + 9 + dx), (int16_t)(y + 5),
-                              (int16_t)(x + 12 + dx), (int16_t)(y + 5),
-                              0xFFFF);
-            display_draw_line((int16_t)(x + 12 + dx), (int16_t)(y + 5),
-                              (int16_t)(x + 8 + dx), (int16_t)(y + 9),
-                              0xFFFF);
-        }
     }
 }
 
@@ -1251,6 +1242,61 @@ void ui_draw_spectrum(const ui_state_t *s, const char *band, uint32_t min_hz,
     }
 }
 
+void ui_decode_refresh(void)
+{
+    display_fill_rect(6, 72, 308, 96, UI_BG);
+    panel(6, 72, 308, 96, 8, UI_PANEL, UI_LINE);
+
+    char title[32];
+    snprintf(title, sizeof(title), "DECODE %s  GPIO %d",
+             decode_mode_str(), decode_gpio());
+    display_draw_text(10, 74, title, DISPLAY_FONT_TINY, UI_GOLD, UI_PANEL,
+                      DISPLAY_DATUM_TL);
+
+    const char *st = strncmp(decode_text(), "ADC ERR", 7) == 0
+                     ? "ERR" : "RUN";
+    display_draw_text(UI_W - 10, 74, st, DISPLAY_FONT_TINY,
+                      st[0] == 'E' ? UI_RED : UI_OK, UI_PANEL,
+                      DISPLAY_DATUM_TR);
+
+    display_draw_text(10, 86, "SIG", DISPLAY_FONT_TINY, UI_MUTED, UI_PANEL,
+                      DISPLAY_DATUM_TL);
+    bar(32, 88, 278, 4, decode_level(), 100, UI_OK);
+
+    display_fill_rect(8, 96, 304, 54, UI_PANEL);
+    const char *txt = decode_text();
+    int len = (int)strlen(txt);
+    const int per = 44;
+    int start = len > per * 4 ? len - per * 4 : 0;
+    if (len == 0) {
+        display_draw_text(10, 98, "WAIT...", DISPLAY_FONT_SMALL, UI_MUTED,
+                          UI_PANEL, DISPLAY_DATUM_TL);
+    } else {
+        for (int i = 0; i < 4 && start < len; ++i) {
+            int n = len - start;
+            if (n > per) {
+                n = per;
+            }
+            char buf[48];
+            memcpy(buf, txt + start, (size_t)n);
+            buf[n] = '\0';
+            display_draw_text(10, 98 + i * 13, buf, DISPLAY_FONT_SMALL,
+                              UI_FG, UI_PANEL, DISPLAY_DATUM_TL);
+            start += n;
+        }
+    }
+
+    display_draw_text(10, 154, "TURN:GPIO  CLICK:MODE  HOLD:EXIT",
+                      DISPLAY_FONT_TINY, UI_MUTED, UI_PANEL,
+                      DISPLAY_DATUM_TL);
+}
+
+void ui_draw_decode(const ui_state_t *s)
+{
+    ui_draw_all(s);
+    ui_decode_refresh();
+}
+
 void ui_draw_hint(const ui_state_t *s, const char *toast)
 {
     if (!toast) {
@@ -2155,10 +2201,8 @@ void ui_draw_adv_signal4(const ui_state_t *s)
                 s_eibi_freq = s->freq_hz;
                 s_eibi_utc_min = utc_min;
                 s_eibi_name[0] = '\0';
-                if (eibi_available()) {
-                    eibi_lookup((uint16_t)(s->freq_hz / 1000), utc,
-                                s_eibi_name, sizeof(s_eibi_name));
-                }
+                eibi_lookup((uint16_t)(s->freq_hz / 1000), utc,
+                            s_eibi_name, sizeof(s_eibi_name));
             }
             if (s_eibi_name[0]) {
                 fit_text(ib, sizeof(ib), s_eibi_name, DISPLAY_FONT_SMALL, iw);
@@ -2294,12 +2338,389 @@ static const char *eibi_current(const ui_state_t *s)
         s_eibi_freq = s->freq_hz;
         s_eibi_utc_min = utc_min;
         s_eibi_name[0] = '\0';
-        if (eibi_available()) {
-            eibi_lookup((uint16_t)(s->freq_hz / 1000), utc,
-                        s_eibi_name, sizeof(s_eibi_name));
-        }
+        eibi_lookup((uint16_t)(s->freq_hz / 1000), utc,
+                    s_eibi_name, sizeof(s_eibi_name));
     }
     return s_eibi_name;
+}
+
+static void __attribute__((unused))
+eibi_entry_text(const eibi_entry_t *e, char *out, size_t n)
+{
+    if (e->lang[0] && e->target[0]) {
+        snprintf(out, n, "%s %s %s", e->station, e->lang, e->target);
+    } else if (e->lang[0]) {
+        snprintf(out, n, "%s %s", e->station, e->lang);
+    } else if (e->target[0]) {
+        snprintf(out, n, "%s %s", e->station, e->target);
+    } else {
+        snprintf(out, n, "%s", e->station);
+    }
+}
+
+static void __attribute__((unused))
+eibi_card_draw(const ui_state_t *s, int cy, int cw)
+{
+    static uint16_t cur_freq;
+    static int64_t cur_utc_min = -1;
+    static eibi_entry_t list[8];
+    static int count;
+    static int idx;
+    static int off;
+    static uint32_t pause_until;
+    static char text[96];
+
+    int64_t utc = eibi_utc_now();
+    int64_t utc_min = utc / 60;
+    if (s->freq_hz != cur_freq || utc_min != cur_utc_min) {
+        cur_freq = s->freq_hz;
+        cur_utc_min = utc_min;
+        count = eibi_lookup_entries((uint16_t)(s->freq_hz / 1000), utc,
+                                    list, 8);
+        idx = 0;
+        off = 0;
+        pause_until = 0;
+    }
+
+    display_draw_text(12, cy + 3, "EIBI", DISPLAY_FONT_TINY, UI_GOLD,
+                      UI_PANEL, DISPLAY_DATUM_TL);
+    if (count == 0) {
+        display_draw_text(12, cy + 16, "NO DATA", DISPLAY_FONT_TINY,
+                          UI_MUTED, UI_PANEL, DISPLAY_DATUM_TL);
+        return;
+    }
+    if (count > 1) {
+        char pg[32];
+        snprintf(pg, sizeof(pg), "%u/%u", (unsigned)(idx + 1),
+                 (unsigned)count);
+        display_draw_text(8 + cw - 4, cy + 3, pg, DISPLAY_FONT_TINY,
+                          UI_MUTED, UI_PANEL, DISPLAY_DATUM_TR);
+    }
+
+    uint32_t now = now_ms();
+    if (pause_until != 0) {
+        if ((int32_t)(now - pause_until) < 0) {
+            eibi_entry_text(&list[idx], text, sizeof(text));
+            display_set_clip(12, cy + 16, (uint16_t)(cw - 8), 16);
+            display_draw_text(12, cy + 16, text, DISPLAY_FONT_TINY, UI_FG,
+                              UI_PANEL, DISPLAY_DATUM_TL);
+            display_clear_clip();
+            return;
+        }
+        pause_until = 0;
+        if (count > 1) {
+            idx = (idx + 1) % count;
+        }
+        off = 0;
+    }
+
+    eibi_entry_text(&list[idx], text, sizeof(text));
+    int w = cw - 8;
+    int tw = display_text_width(text, DISPLAY_FONT_TINY);
+    if (tw <= w) {
+        display_draw_text(12, cy + 16, text, DISPLAY_FONT_TINY, UI_FG,
+                          UI_PANEL, DISPLAY_DATUM_TL);
+        pause_until = now + 1000u;
+        return;
+    }
+
+    int span = tw + 24;
+    display_set_clip(12, cy + 16, (uint16_t)w, 16);
+    display_draw_text((int16_t)(12 - off), cy + 16, text, DISPLAY_FONT_TINY,
+                      UI_FG, UI_PANEL, DISPLAY_DATUM_TL);
+    display_draw_text((int16_t)(12 - off + span), cy + 16, text,
+                      DISPLAY_FONT_TINY, UI_FG, UI_PANEL,
+                      DISPLAY_DATUM_TL);
+    display_clear_clip();
+    ++off;
+    if (off >= span) {
+        off = 0;
+        pause_until = now + 1000u;
+    }
+}
+
+static void eibi_card_marquee(const ui_state_t *s, int cy, int cw)
+{
+    static uint16_t cur_freq;
+    static int64_t cur_utc_min = -1;
+    static eibi_entry_t list[8];
+    static int count;
+    static char text[256];
+    static int starts[8];
+    static int off;
+    static int next_idx;
+    static uint32_t pause_until;
+
+    int64_t utc = eibi_utc_now();
+    int64_t utc_min = utc / 60;
+    if (s->freq_hz != cur_freq || utc_min != cur_utc_min) {
+        cur_freq = s->freq_hz;
+        cur_utc_min = utc_min;
+        count = eibi_lookup_entries((uint16_t)(s->freq_hz / 1000), utc,
+                                    list, 8);
+        text[0] = '\0';
+        int pos = 0;
+        for (int i = 0; i < count; ++i) {
+            if (i > 0) {
+                strncat(text, "  /  ", sizeof(text) - strlen(text) - 1);
+                pos += display_text_width("  /  ", DISPLAY_FONT_TINY);
+            }
+            starts[i] = pos;
+            char tmp[320];
+            eibi_entry_text(&list[i], tmp, sizeof(tmp));
+            strncat(text, tmp, sizeof(text) - strlen(text) - 1);
+            pos += display_text_width(tmp, DISPLAY_FONT_TINY);
+        }
+        off = 0;
+        next_idx = 1;
+        pause_until = now_ms() + 1000u;
+    }
+
+    display_draw_text(12, cy + 3, "EIBI", DISPLAY_FONT_TINY, UI_GOLD,
+                      UI_PANEL, DISPLAY_DATUM_TL);
+    if (count == 0) {
+        display_draw_text(12, cy + 16, "NO DATA", DISPLAY_FONT_TINY,
+                          UI_MUTED, UI_PANEL, DISPLAY_DATUM_TL);
+        return;
+    }
+
+    int w = cw - 8;
+    int tw = display_text_width(text, DISPLAY_FONT_TINY);
+    if (tw <= w) {
+        display_draw_text(12, cy + 16, text, DISPLAY_FONT_TINY, UI_FG,
+                          UI_PANEL, DISPLAY_DATUM_TL);
+        return;
+    }
+
+    int span = tw + 24;
+    uint32_t now = now_ms();
+    if (pause_until != 0 && (int32_t)(now - pause_until) < 0) {
+        display_set_clip(12, cy + 16, (uint16_t)w, 16);
+        display_draw_text((int16_t)(12 - off), cy + 16, text,
+                          DISPLAY_FONT_TINY, UI_FG, UI_PANEL,
+                          DISPLAY_DATUM_TL);
+        display_clear_clip();
+        return;
+    }
+    pause_until = 0;
+
+    display_set_clip(12, cy + 16, (uint16_t)w, 16);
+    display_draw_text((int16_t)(12 - off), cy + 16, text, DISPLAY_FONT_TINY,
+                      UI_FG, UI_PANEL, DISPLAY_DATUM_TL);
+    display_draw_text((int16_t)(12 - off + span), cy + 16, text,
+                      DISPLAY_FONT_TINY, UI_FG, UI_PANEL,
+                      DISPLAY_DATUM_TL);
+    display_clear_clip();
+    off += 2;
+
+    if (next_idx < count && off >= starts[next_idx]) {
+        off = starts[next_idx];
+        ++next_idx;
+        pause_until = now + 1000u;
+    }
+    if (off >= span) {
+        off = 0;
+        next_idx = 1;
+        pause_until = now + 1000u;
+    }
+}
+
+static void __attribute__((unused))
+eibi_card_pause_marquee(const ui_state_t *s, int cy, int cw)
+{
+    static uint16_t cur_freq;
+    static int64_t cur_utc_min = -1;
+    static char text[128];
+    static int starts[8];
+    static int segs;
+    static int off;
+    static int next_idx;
+    static uint32_t pause_until;
+
+    int64_t utc = eibi_utc_now();
+    int64_t utc_min = utc / 60;
+    if (s->freq_hz != cur_freq || utc_min != cur_utc_min) {
+        cur_freq = s->freq_hz;
+        cur_utc_min = utc_min;
+        eibi_lookup((uint16_t)(s->freq_hz / 1000), utc, text, sizeof(text));
+        segs = 0;
+        int pos = 0;
+        const char *p = text;
+        while (p && *p && segs < 8) {
+            const char *sep = strstr(p, " / ");
+            int len = sep ? (int)(sep - p) : (int)strlen(p);
+            starts[segs++] = pos;
+            char tmp[64];
+            int n = len < (int)sizeof(tmp) - 1 ? len : (int)sizeof(tmp) - 1;
+            memcpy(tmp, p, (size_t)n);
+            tmp[n] = '\0';
+            pos += display_text_width(tmp, DISPLAY_FONT_TINY);
+            if (!sep) {
+                break;
+            }
+            pos += display_text_width(" / ", DISPLAY_FONT_TINY);
+            p = sep + 3;
+        }
+        off = 0;
+        next_idx = 1;
+        pause_until = now_ms() + 1000u;
+    }
+
+    display_draw_text(12, cy + 3, "EIBI", DISPLAY_FONT_TINY, UI_GOLD,
+                      UI_PANEL, DISPLAY_DATUM_TL);
+    if (text[0] == '\0') {
+        display_draw_text(12, cy + 16, "NO DATA", DISPLAY_FONT_TINY,
+                          UI_MUTED, UI_PANEL, DISPLAY_DATUM_TL);
+        return;
+    }
+
+    int w = cw - 8;
+    int tw = display_text_width(text, DISPLAY_FONT_TINY);
+    if (tw <= w) {
+        display_draw_text(12, cy + 16, text, DISPLAY_FONT_TINY, UI_FG,
+                          UI_PANEL, DISPLAY_DATUM_TL);
+        return;
+    }
+
+    int span = tw + 24;
+    uint32_t now = now_ms();
+    if (pause_until != 0 && (int32_t)(now - pause_until) < 0) {
+        display_set_clip(12, cy + 16, (uint16_t)w, 16);
+        display_draw_text((int16_t)(12 - off), cy + 16, text,
+                          DISPLAY_FONT_TINY, UI_FG, UI_PANEL,
+                          DISPLAY_DATUM_TL);
+        display_clear_clip();
+        return;
+    }
+    pause_until = 0;
+
+    display_set_clip(12, cy + 16, (uint16_t)w, 16);
+    display_draw_text((int16_t)(12 - off), cy + 16, text, DISPLAY_FONT_TINY,
+                      UI_FG, UI_PANEL, DISPLAY_DATUM_TL);
+    display_draw_text((int16_t)(12 - off + span), cy + 16, text,
+                      DISPLAY_FONT_TINY, UI_FG, UI_PANEL,
+                      DISPLAY_DATUM_TL);
+    display_clear_clip();
+    ++off;
+
+    if (next_idx < segs && off >= starts[next_idx]) {
+        off = starts[next_idx];
+        ++next_idx;
+        pause_until = now + 1000u;
+    }
+    if (off >= span) {
+        off = 0;
+        next_idx = 1;
+        pause_until = now + 1000u;
+    }
+}
+
+#define EIBI_SLIDE_MS 400u
+
+static void __attribute__((unused))
+eibi_card_carousel(const ui_state_t *s, int cy, int cw)
+{
+    static uint16_t cur_freq;
+    static int64_t cur_utc_min = -1;
+    static char seg[8][96];
+    static int count;
+    static int idx;
+    static int phase;
+    static uint32_t phase_ms;
+    static uint32_t draws;
+
+    ++draws;
+    int64_t utc = eibi_utc_now();
+    int64_t utc_min = utc / 60;
+    if (s->freq_hz != cur_freq || utc_min != cur_utc_min) {
+        cur_freq = s->freq_hz;
+        cur_utc_min = utc_min;
+        char raw[128];
+        eibi_lookup((uint16_t)(s->freq_hz / 1000), utc, raw, sizeof(raw));
+        count = 0;
+        const char *p = raw;
+        while (p && *p && count < 8) {
+            const char *sep = strstr(p, " / ");
+            int len = sep ? (int)(sep - p) : (int)strlen(p);
+            while (len > 0 && *p == ' ') {
+                ++p;
+                --len;
+            }
+            while (len > 0 && p[len - 1] == ' ') {
+                --len;
+            }
+            if (len > 0) {
+                int n = len < 95 ? len : 95;
+                memcpy(seg[count], p, (size_t)n);
+                seg[count][n] = '\0';
+                ++count;
+            }
+            if (!sep) {
+                break;
+            }
+            p = sep + 3;
+        }
+        idx = 0;
+        phase = 0;
+        phase_ms = now_ms();
+    }
+
+    display_draw_text(12, cy + 3, "EIBI", DISPLAY_FONT_TINY, UI_GOLD,
+                      UI_PANEL, DISPLAY_DATUM_TL);
+    if (count == 0) {
+        display_draw_text(12, cy + 16, "NO DATA", DISPLAY_FONT_TINY,
+                          UI_MUTED, UI_PANEL, DISPLAY_DATUM_TL);
+        return;
+    }
+    char pg[32];
+    snprintf(pg, sizeof(pg), "%u/%u d%u p%d", (unsigned)(idx + 1),
+             (unsigned)count, (unsigned)(draws % 1000), phase);
+    display_draw_text(8 + cw - 4, cy + 3, pg, DISPLAY_FONT_TINY,
+                      UI_MUTED, UI_PANEL, DISPLAY_DATUM_TR);
+
+    int w = cw - 8;
+    char cur[96];
+    fit_text(cur, sizeof(cur), seg[idx], DISPLAY_FONT_TINY, w);
+
+    if (count == 1) {
+        display_draw_text(12, cy + 16, cur, DISPLAY_FONT_TINY, UI_FG,
+                          UI_PANEL, DISPLAY_DATUM_TL);
+        return;
+    }
+
+    uint32_t now = now_ms();
+    if (phase == 0) {
+        if ((uint32_t)(now - phase_ms) >= 1000u) {
+            phase = 1;
+            phase_ms = now;
+        }
+        display_draw_text(12, cy + 16, cur, DISPLAY_FONT_TINY, UI_FG,
+                          UI_PANEL, DISPLAY_DATUM_TL);
+        return;
+    }
+
+    uint32_t elapsed = now - phase_ms;
+    if (elapsed >= EIBI_SLIDE_MS) {
+        idx = (idx + 1) % count;
+        phase = 0;
+        phase_ms = now;
+        fit_text(cur, sizeof(cur), seg[idx], DISPLAY_FONT_TINY, w);
+        display_draw_text(12, cy + 16, cur, DISPLAY_FONT_TINY, UI_FG,
+                          UI_PANEL, DISPLAY_DATUM_TL);
+        return;
+    }
+
+    char next[96];
+    fit_text(next, sizeof(next), seg[(idx + 1) % count], DISPLAY_FONT_TINY,
+             w);
+    int px = (int)((uint32_t)w * elapsed / EIBI_SLIDE_MS);
+    display_set_clip(12, cy + 16, (uint16_t)w, 16);
+    display_draw_text((int16_t)(12 - px), cy + 16, cur, DISPLAY_FONT_TINY,
+                      UI_FG, UI_PANEL, DISPLAY_DATUM_TL);
+    display_draw_text((int16_t)(12 + w - px), cy + 16, next,
+                      DISPLAY_FONT_TINY, UI_FG, UI_PANEL,
+                      DISPLAY_DATUM_TL);
+    display_clear_clip();
 }
 
 static void marquee_line(int x, int y, int w, const char *text,
@@ -3166,10 +3587,31 @@ void ui_draw_options(const ui_options_t *o)
         }
         uint16_t bg = cur ? UI_HSEL : UI_PANEL;
         uint16_t fg = cur ? UI_FG : UI_MUTED;
-        fit_text(buf, sizeof(buf), o->labels[idx], DISPLAY_FONT_SMALL,
-                 OPT_OV_W - 48);
-        display_draw_text((int16_t)(x + 16), (int16_t)ry, buf,
-                          DISPLAY_FONT_SMALL, fg, bg, DISPLAY_DATUM_TL);
+        const char *lbl = o->labels[idx];
+        const char *tab = lbl ? strchr(lbl, '\t') : NULL;
+        if (tab) {
+            char left[24];
+            char right[24];
+            int ln = (int)(tab - lbl);
+            if (ln > (int)sizeof(left) - 1) {
+                ln = (int)sizeof(left) - 1;
+            }
+            memcpy(left, lbl, (size_t)ln);
+            left[ln] = '\0';
+            snprintf(right, sizeof(right), "%s", tab + 1);
+            display_draw_text((int16_t)(x + 16), (int16_t)ry, left,
+                              DISPLAY_FONT_SMALL, fg, bg,
+                              DISPLAY_DATUM_TL);
+            display_draw_text((int16_t)(x + 120), (int16_t)ry,
+                              right, DISPLAY_FONT_SMALL, fg, bg,
+                              DISPLAY_DATUM_TL);
+        } else {
+            fit_text(buf, sizeof(buf), lbl, DISPLAY_FONT_SMALL,
+                     OPT_OV_W - 48);
+            display_draw_text((int16_t)(x + 16), (int16_t)ry, buf,
+                              DISPLAY_FONT_SMALL, fg, bg,
+                              DISPLAY_DATUM_TL);
+        }
         if (idx == o->cursor) {
             display_fill_round_rect((int16_t)(x + OPT_OV_W - 20),
                                     (int16_t)(ry + 3), 7, 7, 3, UI_OK);

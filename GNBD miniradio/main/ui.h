@@ -192,6 +192,8 @@ void ui_draw_spectrum(const ui_state_t *s, const char *band, uint32_t min_hz,
                       uint32_t max_hz, const uint8_t *rssi,
                       const uint8_t *snr, int count, int index, int cursor,
                       bool done);
+void ui_draw_decode(const ui_state_t *s);
+void ui_decode_refresh(void);
 void ui_draw_hint(const ui_state_t *s, const char *toast);
 
 void ui_draw_radio_panel(const ui_state_t *s);

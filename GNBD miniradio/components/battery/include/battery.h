@@ -16,15 +16,14 @@ extern "C" {
 
 typedef struct {
     uint16_t millivolt;   /* 배터리 전압 (mV) */
-    uint8_t  percent;     /* 0–100 */
-    bool     charging;    /* 충전 중 추정 (전압 상승) */
+    uint8_t  percent;     /* 0~100 */
     bool     low;         /* 저전압 경고 */
 } battery_state_t;
 
 /** @brief ADC 초기화 (oneshot, 12bit) */
 esp_err_t battery_init(int adc_gpio);
 
-/** @brief 전압/잔량 갱신 (평균 8회) */
+/** @brief 전압/잔량 갱신 (평균 4회) */
 esp_err_t battery_update(battery_state_t *out);
 
 /** @brief 최근 측정값 */

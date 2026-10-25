@@ -22,12 +22,19 @@ typedef struct __attribute__((packed)) {
     char     name[32];
 } eibi_rec_t;
 
+typedef struct {
+    char station[26];
+    char lang[5];
+    char target[5];
+} eibi_entry_t;
+
 esp_err_t eibi_fs_mount(void);
 bool eibi_available(void);
 bool eibi_parse_line(char *line, eibi_rec_t *out);
 void eibi_task(void *arg);
 void eibi_download_start(void);
 int eibi_lookup(uint16_t freq, int64_t utc, char *out, size_t n);
+int eibi_lookup_entries(uint16_t freq, int64_t utc, eibi_entry_t *out, int max);
 int64_t eibi_utc_now(void);
 void eibi_refresh(void);
 int eibi_record_count(void);
