@@ -521,6 +521,16 @@ void display_clear_clip(void)
     }
 }
 
+esp_err_t display_draw_rgb565(int16_t x, int16_t y, uint16_t w, uint16_t h,
+                              const uint16_t *data)
+{
+    ESP_RETURN_ON_FALSE(s_inited, ESP_ERR_INVALID_STATE, TAG, "not init");
+    ESP_RETURN_ON_FALSE(data && w && h, ESP_ERR_INVALID_ARG, TAG, "bad blit");
+    canvas()->pushImage(x, y, w, h, data);
+    display_mark_dirty(x, y, w, h);
+    return ESP_OK;
+}
+
 esp_err_t display_draw_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
                             uint16_t color)
 {
@@ -664,8 +674,7 @@ uint16_t display_draw_text_scaled(int16_t x, int16_t y, const char *text,
 
 uint16_t display_text_width_scaled(const char *text, display_font_t font,
                                    uint8_t scale)
-{
-    if (!text || !*text || !s_inited) {
+{    if (!text || !*text || !s_inited) {
         return 0;
     }
     if (scale < 1) {
@@ -674,6 +683,58 @@ uint16_t display_text_width_scaled(const char *text, display_font_t font,
     lgfx::LovyanGFX *c = canvas();
     c->setFont(font_of(font));
     c->setTextSize(scale);
+    uint16_t w = (uint16_t)c->textWidth(text);
+    c->setTextSize(1);
+    return w;
+}
+
+uint16_t display_draw_text_pct(int16_t x, int16_t y, const char *text,
+                               display_font_t font, uint16_t fg, uint16_t bg,
+                               display_datum_t datum, uint16_t pct)
+{
+    if (!text || !*text || !s_inited) {
+        return 0;
+    }
+    if (pct < 10) pct = 10;
+    if (pct > 300) pct = 300;
+    float scale = (float)pct / 100.0f;
+    lgfx::LovyanGFX *c = canvas();
+    c->setFont(font_of(font));
+    c->setTextSize(scale);
+    c->setTextColor(fg, bg);
+    c->setTextDatum(datum_of(datum));
+    c->drawString(text, x, y);
+    uint16_t w = (uint16_t)c->textWidth(text);
+    int16_t th = (int16_t)c->fontHeight();
+    c->setTextSize(1);
+
+    int16_t tx = x, ty = y;
+    switch (datum) {
+    case DISPLAY_DATUM_TC: tx = (int16_t)(x - w / 2); ty = y; break;
+    case DISPLAY_DATUM_TR: tx = (int16_t)(x - w);     ty = y; break;
+    case DISPLAY_DATUM_ML: tx = x;          ty = (int16_t)(y - th / 2); break;
+    case DISPLAY_DATUM_MC: tx = (int16_t)(x - w / 2); ty = (int16_t)(y - th / 2); break;
+    case DISPLAY_DATUM_MR: tx = (int16_t)(x - w);     ty = (int16_t)(y - th / 2); break;
+    case DISPLAY_DATUM_BL: tx = x;          ty = (int16_t)(y - th); break;
+    case DISPLAY_DATUM_BC: tx = (int16_t)(x - w / 2); ty = (int16_t)(y - th); break;
+    case DISPLAY_DATUM_BR: tx = (int16_t)(x - w);     ty = (int16_t)(y - th); break;
+    case DISPLAY_DATUM_TL: break;
+    }
+    display_mark_dirty(tx, ty, w, (uint16_t)th);
+    return w;
+}
+
+uint16_t display_text_width_pct(const char *text, display_font_t font,
+                                uint16_t pct)
+{
+    if (!text || !*text || !s_inited) {
+        return 0;
+    }
+    if (pct < 10) pct = 10;
+    if (pct > 300) pct = 300;
+    lgfx::LovyanGFX *c = canvas();
+    c->setFont(font_of(font));
+    c->setTextSize((float)pct / 100.0f);
     uint16_t w = (uint16_t)c->textWidth(text);
     c->setTextSize(1);
     return w;

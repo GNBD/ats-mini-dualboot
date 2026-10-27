@@ -11,6 +11,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_check.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "driver/i2c_master.h"
 #include "si4732.h"
@@ -69,13 +70,7 @@ static void scan_draw_radio(void)
     if (s_hmi != HMI_TUNE && s_hmi != HMI_SEEK) {
         return;
     }
-    if (s_ui.ui_mode != UI_MODE_EASY) {
-        ui_draw_all(&s_ui);
-    } else {
-        ui_draw_freq(&s_ui);
-        ui_draw_status(&s_ui);
-        ui_draw_smeter(&s_ui);
-    }
+    ui_draw_all(&s_ui);
 }
 
 static void scan_rsq_show(const si4732_rsq_t *r, bool redraw)
@@ -180,6 +175,10 @@ esp_err_t radio_tune(void)
     esp_err_t err;
     if (s_ui.mode == RADIO_MODE_FM) {
         err = si4732_fm_tune(&s_radio, s_ui.freq_hz);
+        if (err == ESP_OK) {
+            /* 튜닝 후 RF 이득 고정값이 유지되도록 다시 적용 */
+            rfgain_apply();
+        }
     } else {
         si4732_sideband_t sb = SI4732_SSB_OFF;
         if (band_is_ssb(s_ui.mode) && !s_ui.patch_missing) {
@@ -282,12 +281,7 @@ static uint32_t s_seek_log_ms;
 
 static void seek_draw(void)
 {
-    if (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK) {
-        ui_draw_all(&s_ui);
-    } else {
-        ui_draw_freq(&s_ui);
-        ui_draw_status(&s_ui);
-    }
+    ui_draw_all(&s_ui);
 }
 
 static esp_err_t seek_hw_start(bool up)
@@ -410,12 +404,7 @@ void seek_finish(bool found)
         mark_change();
         s_freq_dirty = true;
     }
-    if (s_hmi == HMI_TUNE) {
-        ui_draw_all(&s_ui);
-    } else {
-        ui_draw_freq(&s_ui);
-        ui_draw_status(&s_ui);
-    }
+    ui_draw_all(&s_ui);
     if (s_ats != ATS_SEEK) {
         toast(found ? "FOUND" : "NO STN");
     } else {
@@ -458,13 +447,7 @@ void seek_stop(void)
     }
     mark_change();
     s_freq_dirty = true;
-    if (s_ui.ui_mode != UI_MODE_EASY) {
-        ui_draw_all(&s_ui);
-    } else {
-        ui_draw_freq(&s_ui);
-        ui_draw_status(&s_ui);
-        ui_draw_smeter(&s_ui);
-    }
+    ui_draw_all(&s_ui);
     toast("SEEK STOP");
 }
 
@@ -643,12 +626,7 @@ void ats_start(void)
     s_ui.sw_max = (int)((b->max_hz - b->min_hz) / s_ats_step) + 1;
     s_ats_timeout_ms = (uint32_t)s_ui.sw_max * 80 + 30000;
     s_ats_wait = now_ms() + 60;
-    if (s_hmi == HMI_TUNE) {
-        ui_draw_all(&s_ui);
-    } else {
-        ui_draw_freq(&s_ui);
-        ui_draw_status(&s_ui);
-    }
+    ui_draw_all(&s_ui);
     toast("ATS START");
 }
 
@@ -672,11 +650,7 @@ void ats_poll(uint32_t now)
 
         if (s_ats_hold) {
             s_ats_hold = false;
-            if (s_ui.ui_mode != UI_MODE_EASY) {
-                ui_draw_all(&s_ui);
-            } else {
-                ui_draw_freq(&s_ui);
-            }
+            ui_draw_all(&s_ui);
         } else {
             si4732_rsq_t r;
             bool good;
@@ -697,11 +671,7 @@ void ats_poll(uint32_t now)
                 p->band = (uint8_t)s_ats_band;
                 p->mode = (uint8_t)s_ui.mode;
                 s_ats_last_freq = s_ui.freq_hz;
-                if (s_ui.ui_mode != UI_MODE_EASY) {
-                    ui_draw_all(&s_ui);
-                } else {
-                    ui_draw_freq_saved();
-                }
+                ui_draw_all(&s_ui);
                 s_ats_hold = true;
                 s_ats_wait = now + 300;
                 return;
@@ -739,7 +709,9 @@ const char *const RM_LABELS[RM_COUNT] = {
     "BAND", "MODE", "STEP", "BW", "BFO",
     "SEEK", "SCAN", "ATS",
     "FAVORITES", "RDS", "STEREO", "DEEMPH",
-    "VOLUME", "AGC", "AVC", "SOFTMUTE", "SQUELCH",
+    "VOLUME", "AGC", "RF GAIN", "AVC", "SOFTMUTE", "SQUELCH",
+    "MOD A", "MOD B", "MOD C", "MOD D",
+    "MOD E", "MOD F", "MOD G", "MOD H",
     "SETTINGS"
 };
 
@@ -752,6 +724,9 @@ const char *const ST_LABELS[ST_COUNT] = {
     "TIME", "UTC",
     "BATT", "BATT CAL", "CPU", "WI-FI",
     "EIBI", "QUICK SET",
+    "SIG spd", "BOTTOM",
+    "MOD A", "MOD B", "MOD C", "MOD D",
+    "MOD E", "MOD F", "MOD G", "MOD H",
     "ABOUT"
 };
 
@@ -804,6 +779,36 @@ int preset_index_for_freq(uint32_t freq, int band)
     return -1;
 }
 
+/* 저장된 즐겨찾기 이름 (없으면 빈 문자열) */
+const char *preset_name_at(int idx)
+{
+    if (idx < 0 || idx >= STORAGE_PRESET_SLOTS) {
+        return "";
+    }
+    return s_pnames.name[idx];
+}
+
+int band_marks(int band, uint32_t *out, int max)
+{
+    if (!out || max <= 0) {
+        return 0;
+    }
+    int n = 0;
+    for (int i = 0; i < s_presets.count && n < max; ++i) {
+        if (s_presets.slot[i].freq_hz &&
+            s_presets.slot[i].band == (uint8_t)band) {
+            out[n++] = s_presets.slot[i].freq_hz;
+        }
+    }
+    for (int i = 0; i < s_ats_list.count && n < max; ++i) {
+        if (s_ats_list.slot[i].freq_hz &&
+            s_ats_list.slot[i].band == (uint8_t)band) {
+            out[n++] = s_ats_list.slot[i].freq_hz;
+        }
+    }
+    return n;
+}
+
 int ats_index_for_freq(uint32_t freq, int band)
 {
     for (int i = 0; i < s_ats_list.count; ++i) {
@@ -833,7 +838,9 @@ void rsq_poll(uint32_t now)
 {
     static uint32_t last;
     bool fast = (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK);
-    uint32_t period = fast ? 30u : (uint32_t)RSQ_PERIOD;
+    /* SIG spd: LOW=250ms(부드러움), HIGH=30ms(빠름) */
+    uint32_t period = fast ? (s_dbg_sig == 0 ? 250u : 30u)
+                           : (uint32_t)RSQ_PERIOD;
     if (!s_radio_ok || s_ats == ATS_SEEK || (now - last) < period) {
         return;
     }
@@ -900,21 +907,10 @@ void rsq_poll(uint32_t now)
     }
 
     if (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK) {
-        if (s_ui.ui_mode != UI_MODE_EASY) {
-            if (mute_changed) {
-                ui_draw_all(&s_ui);   /* SQ ?? ?? */
-            } else {
-                ui_draw_adv_signal4b(&s_ui);
-            }
+        if (mute_changed) {
+            ui_draw_all(&s_ui);   /* SQ 상태 갱신 */
         } else {
-            static int last_rssi = -1;
-            int rssi = r.rssi > 63 ? 63 : r.rssi;
-            if (rssi != last_rssi || mute_changed) {
-                last_rssi = rssi;
-                ui_draw_smeter(&s_ui);
-                ui_draw_header(&s_ui);
-                toast_redraw();
-            }
+            ui_draw_adv_signal4b(&s_ui);
         }
     }
 }
@@ -927,18 +923,29 @@ void rds_poll(uint32_t now)
         return;
     }
     last = now;
-    si4732_rds_t grp;
-    if (si4732_rds_status(&s_radio, &grp) != ESP_OK) {
+
+    /* Si4732 RDS FIFO는 4그룹. 500ms에 1그룹만 읽으면 초당 11.4그룹
+       유입을 따라가지 못해 FIFO가 넘치고 PS/RT 확보가 매우 느려진다.
+       폴링 주기를 100ms로 줄이고 FIFO가 빌 때까지 읽어낸다. */
+    bool fed = false;
+    for (int i = 0; i < 4; ++i) {
+        si4732_rds_t grp;
+        if (si4732_rds_status(&s_radio, &grp) != ESP_OK) {
+            break;
+        }
+        if (!grp.synced || grp.fifo_used == 0) {
+            break;
+        }
+        rds_parser_feed(&s_rds, grp.block_a, grp.block_b, grp.block_c,
+                        grp.block_d, grp.errors);
+        fed = true;
+        if (grp.fifo_used <= 1) {
+            break;
+        }
+    }
+    if (!fed) {
         return;
     }
-    if (!grp.synced) {
-        return;
-    }
-    if (grp.fifo_used == 0) {
-        return;
-    }
-    rds_parser_feed(&s_rds, grp.block_a, grp.block_b, grp.block_c,
-                    grp.block_d, grp.errors);
     uint32_t h = 2166136261u;
     for (const char *p = s_rds.ps; *p; ++p) {
         h = (h ^ (uint8_t)*p) * 16777619u;
@@ -953,12 +960,7 @@ void rds_poll(uint32_t now)
     if (h != last_rds_hash) {
         last_rds_hash = h;
         if (s_hmi == HMI_TUNE) {
-            if (s_ui.ui_mode != UI_MODE_EASY) {
-                ui_draw_all(&s_ui);
-            } else {
-                ui_draw_rds(&s_ui);
-                toast_redraw();
-            }
+            ui_draw_all(&s_ui);
         }
     }
 }

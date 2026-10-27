@@ -37,7 +37,9 @@ static esp_err_t store_open(nvs_open_mode_t mode, nvs_handle_t *h)
 #define KEY_CLOCK    "clock"
 #define KEY_BATTCAL  "battcal"
 #define KEY_SETUP    "setup"
+#define KEY_RFGAIN   "rfag"
 #define KEY_QUICK    "quickcfg"
+#define KEY_NAMES    "pnames"
 
 void storage_settings_defaults(storage_settings_t *out)
 {
@@ -262,6 +264,47 @@ esp_err_t storage_save_ats(const ats_bank_t *bank)
     nvs_handle_t handle;
     ESP_RETURN_ON_ERROR(store_open(NVS_READWRITE, &handle), TAG, "nvs open");
     esp_err_t err = nvs_set_blob(handle, KEY_ATS, bank, sizeof(*bank));
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    return err;
+}
+
+esp_err_t storage_load_names(storage_names_t *out)
+{
+    ESP_RETURN_ON_FALSE(out, ESP_ERR_INVALID_ARG, TAG, "null out");
+    memset(out, 0, sizeof(*out));
+    out->magic = STORAGE_MAGIC_NAMES;
+
+    nvs_handle_t handle;
+    esp_err_t err = store_open(NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    size_t len = sizeof(*out);
+    err = nvs_get_blob(handle, KEY_NAMES, out, &len);
+    nvs_close(handle);
+    if (err != ESP_OK || len != sizeof(*out) ||
+        out->magic != STORAGE_MAGIC_NAMES) {
+        memset(out, 0, sizeof(*out));
+        out->magic = STORAGE_MAGIC_NAMES;
+        return ESP_ERR_NOT_FOUND;
+    }
+    for (int i = 0; i < STORAGE_PRESET_SLOTS; ++i) {
+        out->name[i][STORAGE_NAME_LEN - 1] = '\0';
+    }
+    return ESP_OK;
+}
+
+esp_err_t storage_save_names(const storage_names_t *names)
+{
+    ESP_RETURN_ON_FALSE(names, ESP_ERR_INVALID_ARG, TAG, "null names");
+    nvs_handle_t handle;
+    ESP_RETURN_ON_ERROR(store_open(NVS_READWRITE, &handle), TAG, "nvs open");
+    storage_names_t tmp = *names;
+    tmp.magic = STORAGE_MAGIC_NAMES;
+    esp_err_t err = nvs_set_blob(handle, KEY_NAMES, &tmp, sizeof(tmp));
     if (err == ESP_OK) {
         err = nvs_commit(handle);
     }
@@ -606,6 +649,43 @@ esp_err_t storage_save_setup_done(bool done)
     nvs_handle_t handle;
     ESP_RETURN_ON_ERROR(store_open(NVS_READWRITE, &handle), TAG, "nvs open");
     esp_err_t err = nvs_set_u8(handle, KEY_SETUP, done ? 1 : 0);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    return err;
+}
+
+/**
+ * @brief FM RF LNA 이득 설정 로드
+ *
+ * 저장값: 0 = AUTO (RF AGC 자동), 1..27 = LNA 이득 인덱스 (값 - 1)
+ *         인덱스 0 = 최소 감쇠(최대 이득), 26 = 최대 감쇠(최소 이득)
+ * 없거나 범위 밖이면 AUTO(0)로 두어 기존 AGC 동작을 유지한다.
+ */
+esp_err_t storage_load_rf_gain(uint8_t *out)
+{
+    ESP_RETURN_ON_FALSE(out, ESP_ERR_INVALID_ARG, TAG, "null rf gain");
+    *out = 0;
+    nvs_handle_t handle;
+    if (store_open(NVS_READONLY, &handle) != ESP_OK) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    uint8_t v = 0;
+    esp_err_t err = nvs_get_u8(handle, KEY_RFGAIN, &v);
+    nvs_close(handle);
+    if (err != ESP_OK) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    *out = (v <= 27u) ? v : 0;
+    return ESP_OK;
+}
+
+esp_err_t storage_save_rf_gain(uint8_t value)
+{
+    nvs_handle_t handle;
+    ESP_RETURN_ON_ERROR(store_open(NVS_READWRITE, &handle), TAG, "nvs open");
+    esp_err_t err = nvs_set_u8(handle, KEY_RFGAIN, (value <= 27u) ? value : 0u);
     if (err == ESP_OK) {
         err = nvs_commit(handle);
     }

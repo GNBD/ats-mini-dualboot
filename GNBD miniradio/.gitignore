@@ -2,5 +2,14 @@ build/
 sdkconfig
 sdkconfig.old
 managed_components/
-*.bin
-*.elf
+dependencies.lock
+.vscode/
+.idea/
+*.pyc
+__pycache__/
+components/si4732/ssb_patch_user.c
+repomix-output.*
+
+NEWPROJECT/.out/
+
+uiedt/.tmp/

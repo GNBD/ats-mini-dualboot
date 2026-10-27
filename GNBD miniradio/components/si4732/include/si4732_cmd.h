@@ -22,6 +22,8 @@
 #define SI4732_CMD_FM_TUNE_STATUS   0x22
 #define SI4732_CMD_FM_RSQ_STATUS    0x23
 #define SI4732_CMD_FM_RDS_STATUS    0x24
+#define SI4732_CMD_FM_AGC_STATUS    0x27  /* FM RF AGC/LNA 이득 조회 */
+#define SI4732_CMD_FM_AGC_OVERRIDE  0x28  /* FM RF AGC 정지 + LNA 이득 고정 */
 
 /* ---- AM/SSB 명령 (AM 계열 공용) ---- */
 #define SI4732_CMD_AM_TUNE_FREQ     0x40

@@ -1,0 +1,1404 @@
+{
+ "file": "main\\ui.c",
+ "funcs": [
+  {
+   "name": "ui_mode_slot",
+   "start": 75,
+   "static": true,
+   "brace_line": 76,
+   "end": 83
+  },
+  {
+   "name": "mode_str",
+   "start": 112,
+   "static": true,
+   "brace_line": 113,
+   "end": 121
+  },
+  {
+   "name": "bw_label",
+   "start": 123,
+   "static": true,
+   "brace_line": 124,
+   "end": 135
+  },
+  {
+   "name": "fit_text",
+   "start": 139,
+   "static": true,
+   "brace_line": 141,
+   "end": 155
+  },
+  {
+   "name": "panel",
+   "start": 157,
+   "static": true,
+   "brace_line": 159,
+   "end": 164
+  },
+  {
+   "name": "pill",
+   "start": 166,
+   "static": true,
+   "brace_line": 168,
+   "end": 175
+  },
+  {
+   "name": "battery_pill",
+   "start": 177,
+   "static": true,
+   "brace_line": 178,
+   "end": 192
+  },
+  {
+   "name": "bar",
+   "start": 194,
+   "static": true,
+   "brace_line": 196,
+   "end": 214
+  },
+  {
+   "name": "wifi_icon",
+   "start": 219,
+   "static": true,
+   "brace_line": 220,
+   "end": 230
+  },
+  {
+   "name": "draw_status_right",
+   "start": 232,
+   "static": true,
+   "brace_line": 233,
+   "end": 339
+  },
+  {
+   "name": "draw_header_tabs",
+   "start": 341,
+   "static": true,
+   "brace_line": 342,
+   "end": 364
+  },
+  {
+   "name": "draw_header_msg",
+   "start": 366,
+   "static": true,
+   "brace_line": 367,
+   "end": 403
+  },
+  {
+   "name": "ui_theme_set",
+   "start": 409,
+   "static": false,
+   "brace_line": 410,
+   "end": 521
+  },
+  {
+   "name": "ui_init",
+   "start": 523,
+   "static": false,
+   "brace_line": 524,
+   "end": 528
+  },
+  {
+   "name": "ui_draw_header",
+   "start": 530,
+   "static": false,
+   "brace_line": 531,
+   "end": 537
+  },
+  {
+   "name": "fmt_freq",
+   "start": 539,
+   "static": true,
+   "brace_line": 541,
+   "end": 569
+  },
+  {
+   "name": "ui_draw_freq_saved",
+   "start": 571,
+   "static": false,
+   "brace_line": 572,
+   "end": 577
+  },
+  {
+   "name": "ui_draw_freq",
+   "start": 579,
+   "static": false,
+   "brace_line": 580,
+   "end": 639
+  },
+  {
+   "name": "chip_row",
+   "start": 641,
+   "static": true,
+   "brace_line": 642,
+   "end": 669
+  },
+  {
+   "name": "ui_draw_smeter",
+   "start": 671,
+   "static": false,
+   "brace_line": 672,
+   "end": 732
+  },
+  {
+   "name": "ui_draw_rds",
+   "start": 734,
+   "static": false,
+   "brace_line": 735,
+   "end": 833
+  },
+  {
+   "name": "ui_draw_status",
+   "start": 835,
+   "static": false,
+   "brace_line": 836,
+   "end": 841
+  },
+  {
+   "name": "ui_draw_loading",
+   "start": 843,
+   "static": false,
+   "brace_line": 844,
+   "end": 851
+  },
+  {
+   "name": "ui_draw_sleep_countdown",
+   "start": 854,
+   "static": false,
+   "brace_line": 855,
+   "end": 873
+  },
+  {
+   "name": "ui_draw_volume",
+   "start": 875,
+   "static": false,
+   "brace_line": 876,
+   "end": 891
+  },
+  {
+   "name": "ui_draw_home",
+   "start": 893,
+   "static": false,
+   "brace_line": 895,
+   "end": 947
+  },
+  {
+   "name": "ui_draw_setup_welcome",
+   "start": 949,
+   "static": false,
+   "brace_line": 951,
+   "end": 1004
+  },
+  {
+   "name": "ui_draw_clock",
+   "start": 1006,
+   "static": false,
+   "brace_line": 1007,
+   "end": 1031
+  },
+  {
+   "name": "weather_icon",
+   "start": 1033,
+   "static": true,
+   "brace_line": 1034,
+   "end": 1088
+  },
+  {
+   "name": "ui_draw_weather",
+   "start": 1090,
+   "static": false,
+   "brace_line": 1093,
+   "end": 1158
+  },
+  {
+   "name": "scan_freq_str",
+   "start": 1160,
+   "static": true,
+   "brace_line": 1161,
+   "end": 1168
+  },
+  {
+   "name": "scan_graph",
+   "start": 1170,
+   "static": true,
+   "brace_line": 1172,
+   "end": 1218
+  },
+  {
+   "name": "ui_draw_spectrum",
+   "start": 1220,
+   "static": false,
+   "brace_line": 1224,
+   "end": 1286
+  },
+  {
+   "name": "ui_decode_refresh",
+   "start": 1288,
+   "static": false,
+   "brace_line": 1289,
+   "end": 1335
+  },
+  {
+   "name": "ui_draw_decode",
+   "start": 1337,
+   "static": false,
+   "brace_line": 1338,
+   "end": 1341
+  },
+  {
+   "name": "ui_draw_hint",
+   "start": 1343,
+   "static": false,
+   "brace_line": 1344,
+   "end": 1360
+  },
+  {
+   "name": "ui_draw_quick",
+   "start": 1362,
+   "static": false,
+   "brace_line": 1363,
+   "end": 1407
+  },
+  {
+   "name": "ui_draw_quick_cfg",
+   "start": 1409,
+   "static": false,
+   "brace_line": 1410,
+   "end": 1453
+  },
+  {
+   "name": "dx_kv",
+   "start": 1457,
+   "static": true,
+   "brace_line": 1459,
+   "end": 1466
+  },
+  {
+   "name": "dx_sig_geom",
+   "start": 1468,
+   "static": true,
+   "brace_line": 1469,
+   "end": 1478
+  },
+  {
+   "name": "ui_draw_dx_signal",
+   "start": 1480,
+   "static": false,
+   "brace_line": 1481,
+   "end": 1511
+  },
+  {
+   "name": "ui_draw_all_dx",
+   "start": 1513,
+   "static": true,
+   "brace_line": 1514,
+   "end": 1704
+  },
+  {
+   "name": "ui_draw_dx_signal2",
+   "start": 1710,
+   "static": false,
+   "brace_line": 1711,
+   "end": 1732
+  },
+  {
+   "name": "ui_draw_all_dx2",
+   "start": 1734,
+   "static": true,
+   "brace_line": 1735,
+   "end": 1828
+  },
+  {
+   "name": "ui_draw_panel_dx2",
+   "start": 1830,
+   "static": true,
+   "brace_line": 1831,
+   "end": 1900
+  },
+  {
+   "name": "ui_draw_dx_signal3",
+   "start": 1902,
+   "static": false,
+   "brace_line": 1903,
+   "end": 1925
+  },
+  {
+   "name": "band_meta",
+   "start": 1927,
+   "static": true,
+   "brace_line": 1928,
+   "end": 1937
+  },
+  {
+   "name": "draw_saved_badges",
+   "start": 1939,
+   "static": true,
+   "brace_line": 1940,
+   "end": 1958
+  },
+  {
+   "name": "ui_draw_band_meta",
+   "start": 1960,
+   "static": false,
+   "brace_line": 1961,
+   "end": 1975
+  },
+  {
+   "name": "draw_freq_text",
+   "start": 1977,
+   "static": true,
+   "brace_line": 1979,
+   "end": 2020
+  },
+  {
+   "name": "ui_draw_all_dx3",
+   "start": 2022,
+   "static": true,
+   "brace_line": 2023,
+   "end": 2098
+  },
+  {
+   "name": "ui_draw_panel_dx3",
+   "start": 2100,
+   "static": true,
+   "brace_line": 2101,
+   "end": 2186
+  },
+  {
+   "name": "adv_hist_add",
+   "start": 2188,
+   "static": true,
+   "brace_line": 2189,
+   "end": 2203
+  },
+  {
+   "name": "ui_draw_adv_signal4",
+   "start": 2205,
+   "static": false,
+   "brace_line": 2206,
+   "end": 2377
+  },
+  {
+   "name": "eibi_current",
+   "start": 2379,
+   "static": true,
+   "brace_line": 2380,
+   "end": 2391
+  },
+  {
+   "name": "eibi_entry_text",
+   "start": 2393,
+   "static": true,
+   "brace_line": 2395,
+   "end": 2405
+  },
+  {
+   "name": "eibi_card_draw",
+   "start": 2407,
+   "static": true,
+   "brace_line": 2409,
+   "end": 2486
+  },
+  {
+   "name": "eibi_card_marquee",
+   "start": 2488,
+   "static": true,
+   "brace_line": 2489,
+   "end": 2572
+  },
+  {
+   "name": "eibi_card_pause_marquee",
+   "start": 2574,
+   "static": true,
+   "brace_line": 2576,
+   "end": 2662
+  },
+  {
+   "name": "eibi_card_carousel",
+   "start": 2666,
+   "static": true,
+   "brace_line": 2668,
+   "end": 2770
+  },
+  {
+   "name": "marquee_line",
+   "start": 2772,
+   "static": true,
+   "brace_line": 2775,
+   "end": 2793
+  },
+  {
+   "name": "adv_kv",
+   "start": 2795,
+   "static": true,
+   "brace_line": 2797,
+   "end": 2804
+  },
+  {
+   "name": "ui_draw_adv_signal4b",
+   "start": 2806,
+   "static": false,
+   "brace_line": 2807,
+   "end": 3076
+  },
+  {
+   "name": "ui_draw_all_adv4",
+   "start": 3078,
+   "static": true,
+   "brace_line": 3079,
+   "end": 3104
+  },
+  {
+   "name": "ui_draw_all",
+   "start": 3106,
+   "static": false,
+   "brace_line": 3107,
+   "end": 3128
+  },
+  {
+   "name": "ui_draw_radio_freq",
+   "start": 3130,
+   "static": false,
+   "brace_line": 3131,
+   "end": 3147
+  },
+  {
+   "name": "scrollbar",
+   "start": 3150,
+   "static": true,
+   "brace_line": 3152,
+   "end": 3164
+  },
+  {
+   "name": "ui_fmt_step",
+   "start": 3171,
+   "static": true,
+   "brace_line": 3172,
+   "end": 3184
+  },
+  {
+   "name": "ui_draw_panel_dx",
+   "start": 3186,
+   "static": true,
+   "brace_line": 3187,
+   "end": 3337
+  },
+  {
+   "name": "ui_draw_radio_panel",
+   "start": 3339,
+   "static": false,
+   "brace_line": 3340,
+   "end": 3507
+  },
+  {
+   "name": "ui_draw_side_list_title",
+   "start": 3509,
+   "static": false,
+   "brace_line": 3511,
+   "end": 3642
+  },
+  {
+   "name": "ui_draw_side_list",
+   "start": 3644,
+   "static": false,
+   "brace_line": 3645,
+   "end": 3647
+  },
+  {
+   "name": "ui_draw_settings_page",
+   "start": 3649,
+   "static": false,
+   "brace_line": 3651,
+   "end": 3705
+  },
+  {
+   "name": "ui_draw_options",
+   "start": 3712,
+   "static": false,
+   "brace_line": 3713,
+   "end": 3836
+  },
+  {
+   "name": "ui_keypad_char",
+   "start": 3853,
+   "static": false,
+   "brace_line": 3854,
+   "end": 3866
+  },
+  {
+   "name": "ui_draw_keypad",
+   "start": 3868,
+   "static": false,
+   "brace_line": 3869,
+   "end": 3930
+  },
+  {
+   "name": "lock_icon",
+   "start": 3933,
+   "static": true,
+   "brace_line": 3934,
+   "end": 3937
+  },
+  {
+   "name": "ui_draw_wifi_app",
+   "start": 3939,
+   "static": false,
+   "brace_line": 3941,
+   "end": 4010
+  },
+  {
+   "name": "ui_draw_wifi_app2",
+   "start": 4012,
+   "static": false,
+   "brace_line": 4015,
+   "end": 4118
+  },
+  {
+   "name": "ui_draw_wifi_app3",
+   "start": 4120,
+   "static": false,
+   "brace_line": 4123,
+   "end": 4245
+  },
+  {
+   "name": "ui_draw_wifi_scanning",
+   "start": 4247,
+   "static": false,
+   "brace_line": 4248,
+   "end": 4266
+  },
+  {
+   "name": "ui_draw_wifi_list",
+   "start": 4268,
+   "static": false,
+   "brace_line": 4271,
+   "end": 4312
+  },
+  {
+   "name": "ui_draw_time_set",
+   "start": 4315,
+   "static": false,
+   "brace_line": 4317,
+   "end": 4382
+  },
+  {
+   "name": "ui_draw_eibi_app",
+   "start": 4386,
+   "static": false,
+   "brace_line": 4387,
+   "end": 4426
+  },
+  {
+   "name": "ui_draw_eibi_view",
+   "start": 4431,
+   "static": false,
+   "brace_line": 4432,
+   "end": 4492
+  },
+  {
+   "name": "ui_draw_splash_app",
+   "start": 4494,
+   "static": false,
+   "brace_line": 4496,
+   "end": 4535
+  },
+  {
+   "name": "ui_draw_eibi_dl",
+   "start": 4537,
+   "static": false,
+   "brace_line": 4538,
+   "end": 4561
+  },
+  {
+   "name": "ui_draw_confirm",
+   "start": 4563,
+   "static": false,
+   "brace_line": 4564,
+   "end": 4592
+  },
+  {
+   "name": "ui_draw_about",
+   "start": 4594,
+   "static": false,
+   "brace_line": 4596,
+   "end": 4706
+  }
+ ],
+ "file_symbols": [
+  {
+   "name": "s_agc_on",
+   "kind": "extern",
+   "line": 25
+  },
+  {
+   "name": "s_avc",
+   "kind": "extern",
+   "line": 26
+  },
+  {
+   "name": "s_softmute",
+   "kind": "extern",
+   "line": 27
+  },
+  {
+   "name": "s_squelch_on",
+   "kind": "extern",
+   "line": 28
+  },
+  {
+   "name": "s_squelch_type",
+   "kind": "extern",
+   "line": 29
+  },
+  {
+   "name": "s_squelch_thr",
+   "kind": "extern",
+   "line": 30
+  },
+  {
+   "name": "s_squelch_muted",
+   "kind": "extern",
+   "line": 31
+  },
+  {
+   "name": "s_stereo_force",
+   "kind": "extern",
+   "line": 32
+  },
+  {
+   "name": "s_deemph_75",
+   "kind": "extern",
+   "line": 33
+  },
+  {
+   "name": "s_bfo",
+   "kind": "extern",
+   "line": 34
+  },
+  {
+   "name": "s_digit_mode",
+   "kind": "extern",
+   "line": 35
+  },
+  {
+   "name": "s_digit_place",
+   "kind": "extern",
+   "line": 36
+  },
+  {
+   "name": "s_brightness",
+   "kind": "extern",
+   "line": 37
+  },
+  {
+   "name": "s_power_save",
+   "kind": "extern",
+   "line": 38
+  },
+  {
+   "name": "s_theme",
+   "kind": "extern",
+   "line": 39
+  },
+  {
+   "name": "s_sta_connected",
+   "kind": "extern",
+   "line": 40
+  },
+  {
+   "name": "s_ap_pass",
+   "kind": "extern",
+   "line": 41
+  },
+  {
+   "name": "s_sig_view",
+   "kind": "extern",
+   "line": 44
+  },
+  {
+   "name": "s_scan_n",
+   "kind": "extern",
+   "line": 46
+  },
+  {
+   "name": "s_scan_running",
+   "kind": "extern",
+   "line": 47
+  },
+  {
+   "name": "s_scan_ptr",
+   "kind": "extern",
+   "line": 48
+  },
+  {
+   "name": "s_scan_secure",
+   "kind": "extern",
+   "line": 49
+  },
+  {
+   "name": "s_scan_rssi",
+   "kind": "extern",
+   "line": 50
+  },
+  {
+   "name": "s_scan_cursor",
+   "kind": "extern",
+   "line": 51
+  },
+  {
+   "name": "s_scan_top",
+   "kind": "extern",
+   "line": 52
+  },
+  {
+   "name": "s_radio_draw_seq",
+   "kind": "extern",
+   "line": 53
+  },
+  {
+   "name": "ADV_HIST",
+   "kind": "define",
+   "line": 57
+  },
+  {
+   "name": "s_hist_rssi",
+   "kind": "staticvar",
+   "line": 58
+  },
+  {
+   "name": "s_hist_snr",
+   "kind": "staticvar",
+   "line": 59
+  },
+  {
+   "name": "s_hist_n",
+   "kind": "staticvar",
+   "line": 60
+  },
+  {
+   "name": "s_hist_pos",
+   "kind": "staticvar",
+   "line": 61
+  },
+  {
+   "name": "s_eibi_freq",
+   "kind": "staticvar",
+   "line": 62
+  },
+  {
+   "name": "s_eibi_utc_min",
+   "kind": "staticvar",
+   "line": 63
+  },
+  {
+   "name": "s_eibi_name",
+   "kind": "staticvar",
+   "line": 64
+  },
+  {
+   "name": "s_utc_min",
+   "kind": "extern",
+   "line": 65
+  },
+  {
+   "name": "s_cpu_mhz",
+   "kind": "extern",
+   "line": 66
+  },
+  {
+   "name": "?",
+   "kind": "extern",
+   "line": 67
+  },
+  {
+   "name": "s_quick_mask",
+   "kind": "extern",
+   "line": 68
+  },
+  {
+   "name": "QA_LABELS",
+   "kind": "extern",
+   "line": 69
+  },
+  {
+   "name": "UI_QUICK_MAX",
+   "kind": "define",
+   "line": 70
+  },
+  {
+   "name": "UI_QA_COUNT",
+   "kind": "define",
+   "line": 71
+  },
+  {
+   "name": "UI_LAYOUT_DX",
+   "kind": "define",
+   "line": 73
+  },
+  {
+   "name": "HDR_H",
+   "kind": "define",
+   "line": 85
+  },
+  {
+   "name": "HDR_LINE_Y",
+   "kind": "define",
+   "line": 86
+  },
+  {
+   "name": "META_CLEAR_W",
+   "kind": "define",
+   "line": 87
+  },
+  {
+   "name": "HERO_X",
+   "kind": "define",
+   "line": 89
+  },
+  {
+   "name": "HERO_Y",
+   "kind": "define",
+   "line": 90
+  },
+  {
+   "name": "HERO_W",
+   "kind": "define",
+   "line": 91
+  },
+  {
+   "name": "HERO_H",
+   "kind": "define",
+   "line": 92
+  },
+  {
+   "name": "META_Y",
+   "kind": "define",
+   "line": 94
+  },
+  {
+   "name": "META_H",
+   "kind": "define",
+   "line": 95
+  },
+  {
+   "name": "SIG_X",
+   "kind": "define",
+   "line": 97
+  },
+  {
+   "name": "SIG_Y",
+   "kind": "define",
+   "line": 98
+  },
+  {
+   "name": "SIG_W",
+   "kind": "define",
+   "line": 99
+  },
+  {
+   "name": "SIG_H",
+   "kind": "define",
+   "line": 100
+  },
+  {
+   "name": "RDS_Y",
+   "kind": "define",
+   "line": 102
+  },
+  {
+   "name": "RDS_H",
+   "kind": "define",
+   "line": 103
+  },
+  {
+   "name": "OPT_SHEET_Y",
+   "kind": "define",
+   "line": 106
+  },
+  {
+   "name": "OPT_SHEET_H",
+   "kind": "define",
+   "line": 107
+  },
+  {
+   "name": "OPT_W",
+   "kind": "define",
+   "line": 108
+  },
+  {
+   "name": "OPT_HDR",
+   "kind": "define",
+   "line": 109
+  },
+  {
+   "name": "OPT_RH",
+   "kind": "define",
+   "line": 110
+  },
+  {
+   "name": "CP_W",
+   "kind": "define",
+   "line": 1707
+  },
+  {
+   "name": "EIBI_SLIDE_MS",
+   "kind": "define",
+   "line": 2664
+  },
+  {
+   "name": "CP_W",
+   "kind": "define",
+   "line": 3169
+  },
+  {
+   "name": "OPT_OV_W",
+   "kind": "define",
+   "line": 3709
+  },
+  {
+   "name": "OPT_OV_RH",
+   "kind": "define",
+   "line": 3710
+  },
+  {
+   "name": "EIBI_VIEW_ROWS",
+   "kind": "define",
+   "line": 4428
+  },
+  {
+   "name": "EIBI_VIEW_RH",
+   "kind": "define",
+   "line": 4429
+  }
+ ],
+ "usage": {
+  "ui_mode_slot": [],
+  "mode_str": [],
+  "bw_label": [],
+  "fit_text": [],
+  "panel": [],
+  "pill": [
+   "fit_text"
+  ],
+  "battery_pill": [
+   "panel"
+  ],
+  "bar": [],
+  "wifi_icon": [],
+  "draw_status_right": [
+   "battery_pill",
+   "wifi_icon"
+  ],
+  "draw_header_tabs": [
+   "HDR_H",
+   "HDR_LINE_Y",
+   "draw_status_right"
+  ],
+  "draw_header_msg": [
+   "HDR_H"
+  ],
+  "ui_theme_set": [],
+  "ui_init": [
+   "ui_theme_set"
+  ],
+  "ui_draw_header": [
+   "draw_header_msg",
+   "draw_header_tabs"
+  ],
+  "fmt_freq": [],
+  "ui_draw_freq_saved": [
+   "HERO_H",
+   "HERO_W",
+   "HERO_X",
+   "HERO_Y",
+   "panel"
+  ],
+  "ui_draw_freq": [
+   "HERO_H",
+   "HERO_W",
+   "HERO_X",
+   "HERO_Y",
+   "fmt_freq",
+   "mode_str",
+   "panel",
+   "pill"
+  ],
+  "chip_row": [
+   "META_H",
+   "META_Y",
+   "bw_label"
+  ],
+  "ui_draw_smeter": [
+   "SIG_H",
+   "SIG_W",
+   "SIG_X",
+   "SIG_Y",
+   "UI_LAYOUT_DX",
+   "bar",
+   "panel",
+   "ui_draw_adv_signal4b",
+   "ui_draw_all_dx3"
+  ],
+  "ui_draw_rds": [
+   "RDS_H",
+   "RDS_Y",
+   "UI_LAYOUT_DX",
+   "fit_text",
+   "panel",
+   "ui_draw_adv_signal4b",
+   "ui_draw_all_dx3"
+  ],
+  "ui_draw_status": [
+   "draw_header_msg"
+  ],
+  "ui_draw_loading": [
+   "panel"
+  ],
+  "ui_draw_sleep_countdown": [
+   "bar",
+   "panel"
+  ],
+  "ui_draw_volume": [
+   "bar",
+   "ui_draw_all"
+  ],
+  "ui_draw_home": [
+   "draw_status_right",
+   "fit_text",
+   "panel"
+  ],
+  "ui_draw_setup_welcome": [
+   "bar",
+   "fit_text"
+  ],
+  "ui_draw_clock": [
+   "draw_status_right"
+  ],
+  "weather_icon": [],
+  "ui_draw_weather": [
+   "draw_status_right",
+   "fit_text",
+   "panel",
+   "weather_icon"
+  ],
+  "scan_freq_str": [],
+  "scan_graph": [],
+  "ui_draw_spectrum": [
+   "HDR_H",
+   "SIG_Y",
+   "panel",
+   "scan_freq_str",
+   "scan_graph",
+   "ui_draw_all"
+  ],
+  "ui_decode_refresh": [
+   "bar",
+   "panel"
+  ],
+  "ui_draw_decode": [
+   "ui_decode_refresh",
+   "ui_draw_all"
+  ],
+  "ui_draw_hint": [
+   "SIG_Y",
+   "UI_LAYOUT_DX",
+   "fit_text",
+   "panel",
+   "ui_draw_all",
+   "ui_draw_rds",
+   "ui_draw_smeter"
+  ],
+  "ui_draw_quick": [
+   "HDR_H",
+   "UI_QA_COUNT",
+   "UI_QUICK_MAX",
+   "ui_draw_all"
+  ],
+  "ui_draw_quick_cfg": [
+   "HDR_LINE_Y",
+   "UI_QA_COUNT",
+   "UI_QUICK_MAX"
+  ],
+  "dx_kv": [],
+  "dx_sig_geom": [],
+  "ui_draw_dx_signal": [
+   "bar",
+   "dx_sig_geom"
+  ],
+  "ui_draw_all_dx": [
+   "bar",
+   "bw_label",
+   "draw_header_msg",
+   "draw_header_tabs",
+   "dx_kv",
+   "dx_sig_geom",
+   "fit_text",
+   "fmt_freq",
+   "mode_str",
+   "pill",
+   "ui_fmt_step",
+   "ui_mode_slot"
+  ],
+  "ui_draw_dx_signal2": [
+   "bar",
+   "panel"
+  ],
+  "ui_draw_all_dx2": [
+   "band_meta",
+   "bw_label",
+   "draw_header_msg",
+   "draw_header_tabs",
+   "fmt_freq",
+   "mode_str",
+   "panel",
+   "pill",
+   "ui_draw_dx_signal2",
+   "ui_fmt_step",
+   "ui_mode_slot"
+  ],
+  "ui_draw_panel_dx2": [
+   "CP_W",
+   "band_meta",
+   "bar",
+   "draw_status_right",
+   "fmt_freq",
+   "panel",
+   "pill"
+  ],
+  "ui_draw_dx_signal3": [
+   "bar"
+  ],
+  "band_meta": [
+   "mode_str"
+  ],
+  "draw_saved_badges": [
+   "pill"
+  ],
+  "ui_draw_band_meta": [
+   "META_CLEAR_W",
+   "band_meta"
+  ],
+  "draw_freq_text": [],
+  "ui_draw_all_dx3": [
+   "band_meta",
+   "bw_label",
+   "draw_freq_text",
+   "draw_header_msg",
+   "draw_header_tabs",
+   "fmt_freq",
+   "pill",
+   "ui_draw_dx_signal3",
+   "ui_fmt_step",
+   "ui_mode_slot"
+  ],
+  "ui_draw_panel_dx3": [
+   "CP_W",
+   "band_meta",
+   "bar",
+   "draw_freq_text",
+   "draw_status_right",
+   "fmt_freq",
+   "pill"
+  ],
+  "adv_hist_add": [
+   "ADV_HIST",
+   "s_hist_n",
+   "s_hist_pos",
+   "s_hist_rssi",
+   "s_hist_snr"
+  ],
+  "ui_draw_adv_signal4": [
+   "ADV_HIST",
+   "adv_hist_add",
+   "bar",
+   "bw_label",
+   "fit_text",
+   "fmt_freq",
+   "s_eibi_freq",
+   "s_eibi_name",
+   "s_eibi_utc_min",
+   "s_hist_n",
+   "s_hist_pos",
+   "s_hist_rssi",
+   "s_hist_snr",
+   "ui_fmt_step",
+   "ui_mode_slot"
+  ],
+  "eibi_current": [
+   "s_eibi_freq",
+   "s_eibi_name",
+   "s_eibi_utc_min"
+  ],
+  "eibi_entry_text": [],
+  "eibi_card_draw": [
+   "eibi_entry_text"
+  ],
+  "eibi_card_marquee": [
+   "eibi_entry_text"
+  ],
+  "eibi_card_pause_marquee": [],
+  "eibi_card_carousel": [
+   "EIBI_SLIDE_MS",
+   "fit_text"
+  ],
+  "marquee_line": [],
+  "adv_kv": [],
+  "ui_draw_adv_signal4b": [
+   "ADV_HIST",
+   "adv_hist_add",
+   "adv_kv",
+   "bar",
+   "bw_label",
+   "eibi_current",
+   "fit_text",
+   "marquee_line",
+   "s_hist_n",
+   "s_hist_pos",
+   "s_hist_rssi",
+   "s_hist_snr",
+   "ui_fmt_step",
+   "ui_mode_slot"
+  ],
+  "ui_draw_all_adv4": [
+   "draw_freq_text",
+   "draw_header_msg",
+   "draw_header_tabs",
+   "draw_saved_badges",
+   "fmt_freq",
+   "ui_draw_adv_signal4b",
+   "ui_draw_band_meta"
+  ],
+  "ui_draw_all": [
+   "UI_LAYOUT_DX",
+   "chip_row",
+   "draw_header_msg",
+   "draw_header_tabs",
+   "ui_draw_all_adv4",
+   "ui_draw_all_dx3",
+   "ui_draw_freq",
+   "ui_draw_rds",
+   "ui_draw_smeter"
+  ],
+  "ui_draw_radio_freq": [
+   "UI_LAYOUT_DX",
+   "ui_draw_all",
+   "ui_draw_all_dx3",
+   "ui_draw_freq"
+  ],
+  "scrollbar": [],
+  "ui_fmt_step": [],
+  "ui_draw_panel_dx": [
+   "CP_W",
+   "bar",
+   "bw_label",
+   "draw_status_right",
+   "dx_kv",
+   "fit_text",
+   "fmt_freq",
+   "mode_str",
+   "pill",
+   "ui_fmt_step",
+   "ui_mode_slot"
+  ],
+  "ui_draw_radio_panel": [
+   "CP_W",
+   "HDR_LINE_Y",
+   "HERO_H",
+   "HERO_Y",
+   "META_Y",
+   "RDS_H",
+   "RDS_Y",
+   "SIG_H",
+   "SIG_X",
+   "SIG_Y",
+   "UI_LAYOUT_DX",
+   "bar",
+   "bw_label",
+   "draw_status_right",
+   "fit_text",
+   "fmt_freq",
+   "mode_str",
+   "panel",
+   "pill",
+   "ui_draw_all_adv4",
+   "ui_draw_all_dx3",
+   "ui_draw_panel_dx3"
+  ],
+  "ui_draw_side_list_title": [
+   "CP_W",
+   "HDR_H",
+   "draw_header_tabs",
+   "fit_text"
+  ],
+  "ui_draw_side_list": [
+   "ui_draw_side_list_title"
+  ],
+  "ui_draw_settings_page": [
+   "draw_status_right",
+   "fit_text",
+   "panel"
+  ],
+  "ui_draw_options": [
+   "HDR_H",
+   "OPT_OV_RH",
+   "OPT_OV_W",
+   "bar",
+   "fit_text"
+  ],
+  "ui_keypad_char": [],
+  "ui_draw_keypad": [
+   "fit_text",
+   "ui_keypad_char"
+  ],
+  "lock_icon": [],
+  "ui_draw_wifi_app": [
+   "fit_text",
+   "panel",
+   "wifi_icon"
+  ],
+  "ui_draw_wifi_app2": [
+   "panel",
+   "wifi_icon"
+  ],
+  "ui_draw_wifi_app3": [
+   "fit_text",
+   "panel",
+   "wifi_icon"
+  ],
+  "ui_draw_wifi_scanning": [
+   "panel"
+  ],
+  "ui_draw_wifi_list": [
+   "fit_text",
+   "lock_icon"
+  ],
+  "ui_draw_time_set": [
+   "panel"
+  ],
+  "ui_draw_eibi_app": [
+   "panel"
+  ],
+  "ui_draw_eibi_view": [
+   "EIBI_VIEW_RH",
+   "EIBI_VIEW_ROWS",
+   "HDR_LINE_Y",
+   "fit_text"
+  ],
+  "ui_draw_splash_app": [
+   "HDR_LINE_Y",
+   "fit_text"
+  ],
+  "ui_draw_eibi_dl": [
+   "panel"
+  ],
+  "ui_draw_confirm": [
+   "fit_text",
+   "panel"
+  ],
+  "ui_draw_about": [
+   "fit_text",
+   "panel"
+  ]
+ }
+}

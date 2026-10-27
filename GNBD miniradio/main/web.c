@@ -22,10 +22,12 @@
 #include "esp_littlefs.h"
 #include "audio.h"
 #include "app.h"
+#include "ui_web.h"
 #include "display.h"
 
 /* HTTP handlers run sequentially in one task, so share a single page buffer. */
 static char page[40960];
+static const char *TAG = "web";
 
 void json_escape(char *dst, size_t n, const char *src)
 {
@@ -208,6 +210,17 @@ static const char WEB_STYLE[] =
     ".item .txt small{color:var(--muted);font-size:12px;font-weight:600}"
     ".item .del{font-size:12px;font-weight:700;color:var(--danger);"
     "background:var(--danger-soft);border-radius:10px;padding:7px 10px}"
+    ".nmf{display:flex;align-items:center;gap:6px;margin:-8px 0 12px}"
+    ".nmf input{flex:1;min-width:0;border:1px solid var(--line);"
+    "border-radius:10px;padding:8px 10px;font-size:13px;background:var(--card);"
+    "color:inherit}"
+    ".addp{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}"
+    ".addp select,.addp input{flex:1 1 84px;min-width:0;border:1px solid "
+    "var(--line);border-radius:10px;padding:9px 10px;font-size:13px;"
+    "background:var(--card);color:inherit}"
+    ".addp .btn{flex:0 0 auto}"
+    ".err{padding:10px 12px;border-radius:10px;background:var(--danger-soft);"
+    "color:var(--danger);font-size:13px;font-weight:600;margin-bottom:10px}"
     ".ap{display:flex;align-items:center;gap:10px;padding:13px 0;"
     "border-bottom:1px solid var(--line);font-size:14px;font-weight:600}"
     ".ap:last-child{border-bottom:0}.ap .rssi{margin-left:auto;"
@@ -323,6 +336,10 @@ static const char WEB_ROOT_MAIN[] =
     "<a class='btn soft' style='width:100%;margin-top:8px'"
     " href='/api/screenshot' download='miniradio.png'>Download screenshot</a>"
     "</div></details>"
+    "<section class='card'><div class='rowline'><span class='k'>UI</span>"
+    "<a class='btn primary' href='/ui/'>UI Editor</a></div>"
+    "<div class='rowline' style='border:0;padding-top:6px'><span class='k'>Docs</span>"
+    "<a class='btn soft' href='/docs'>UI Editor Docs</a></div></section>"
     "<section class='card'><div class='rowline' style='border:0;padding-top:0'>"
     "<span class='k'>Volume</span><span class='v' id='vol'>--</span></div>"
     "<input id='volrange' type='range' min='0' max='63' value='32'"
@@ -471,7 +488,7 @@ int web_nav(char *dst, size_t n, int active)
 {
     return snprintf(dst, n,
         "<div class='bottom'>"
-        "<a class='nav%s' href='/'><svg viewBox='0 0 24 24'>"
+        "<a class='nav%s' href='/radio'><svg viewBox='0 0 24 24'>"
         "<rect x='3' y='7' width='18' height='13' rx='4'/>"
         "<path d='M7 7l10-4'/><circle cx='8' cy='13' r='2'/>"
         "<path d='M15 12h3M15 16h3'/></svg><span>Radio</span></a>"
@@ -494,10 +511,191 @@ int web_nav(char *dst, size_t n, int active)
         active == 4 ? " on" : "");
 }
 
-static bool web_authorized(httpd_req_t *req);
-static esp_err_t web_require_auth(httpd_req_t *req);
+bool web_authorized(httpd_req_t *req);
+esp_err_t web_require_auth(httpd_req_t *req);
 
 esp_err_t http_root_handler(httpd_req_t *req)
+{
+    if (!s_setup_done) {
+        httpd_resp_set_status(req, "303 See Other");
+        httpd_resp_set_hdr(req, "Location", "/setup");
+        return httpd_resp_send(req, "", 0);
+    }
+    if (!web_authorized(req)) {
+        return web_require_auth(req);
+    }
+    int n = snprintf(page, sizeof(page),
+        "<!doctype html><html><head><meta charset='utf-8'>" WEB_THEME_HEAD
+        "<meta name='viewport' content='width=device-width,initial-scale=1,"
+        "viewport-fit=cover'><meta name='theme-color' content='#eef1f7'>"
+        "<title>Mini Radio Hub</title><style>%s"
+        ".choose{display:block;text-decoration:none;color:inherit}"
+        ".choose b{display:block;font-size:18px;margin-bottom:4px}"
+        ".choose span{font-size:12px;color:var(--muted)}"
+        ".hubfoot{margin:18px auto 0;padding:14px 4px 26px;text-align:center;"
+        "font-size:11px;line-height:1.7;color:var(--muted)}"
+        ".hubfoot a{color:var(--accent);text-decoration:none}"
+        ".hubtag{font-size:12px;color:var(--muted);margin-top:2px}"
+        "</style></head><body>"
+        "<div class='top'><div><div class='brand'>Mini Radio Hub</div>"
+        "<div class='hubtag'>by gnbd</div></div>"
+        "<span class='pill gray'>Hub</span></div>"
+        "<main class='wrap'>"
+        "<section class='card'><a class='choose' href='/radio'>"
+        "<b>Web UI</b><span>Radio control, presets and settings</span></a>"
+        "<a class='btn primary' style='width:100%%;margin-top:12px'"
+        " href='/radio'>Open Web UI</a></section>"
+        "<section class='card'><a class='choose' href='/ui/'>"
+        "<b>UI Editor</b><span>Edit the 320x170 screen layout</span></a>"
+        "<a class='btn' style='width:100%%;margin-top:12px'"
+        " href='/ui/'>Open UI Editor</a></section>"
+        "<section class='card'><a class='choose'"
+        " href='https://gnbdatsmini.netlify.app/docs' target='_blank'"
+        " rel='noopener noreferrer'>"
+        "<b>Docs</b><span>Guides, firmware notes and downloads</span></a>"
+        "<a class='btn' style='width:100%%;margin-top:12px'"
+        " href='https://gnbdatsmini.netlify.app/docs' target='_blank'"
+        " rel='noopener noreferrer'>Open Docs</a></section>"
+        "<div class='hubfoot'>"
+        "Designed &amp; developed by <b>@gnbd</b><br>"
+        "<a href='https://gnbdatsmini.netlify.app/docs' target='_blank'"
+        " rel='noopener noreferrer'>gnbdatsmini.netlify.app</a><br>"
+        "MINI-radio firmware &middot; MIT licensed components preserved"
+        "</div>"
+        "</main></body></html>", WEB_STYLE);
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, page, n < 0 ? 0 : (size_t)n);
+}
+
+esp_err_t http_docs_handler(httpd_req_t *req)
+{
+    if (!s_setup_done) {
+        httpd_resp_set_status(req, "303 See Other");
+        httpd_resp_set_hdr(req, "Location", "/setup");
+        return httpd_resp_send(req, "", 0);
+    }
+    if (!web_authorized(req)) {
+        return web_require_auth(req);
+    }
+    int n = snprintf(page, sizeof(page),
+        "<!doctype html><html><head><meta charset='utf-8'>" WEB_THEME_HEAD
+        "<meta name='viewport' content='width=device-width,initial-scale=1,"
+        "viewport-fit=cover'><meta name='theme-color' content='#eef1f7'>"
+        "<title>Docs - Mini Radio Hub</title><style>%s"
+        ".doc h3{margin:14px 0 6px;font-size:14px}"
+        ".doc p,.doc li{font-size:13px;line-height:1.7;color:#344054}"
+        ".doc ul{margin:6px 0 0 18px;padding:0}"
+        ".doc code{background:var(--chip);border-radius:5px;padding:1px 5px;"
+        "font-size:12px}"
+        ".doc .k{display:inline-block;min-width:74px;color:var(--muted);"
+        "font-size:12px;font-weight:700}"
+        ".banner{background:linear-gradient(135deg,#f79009,#ffa41b);color:#1b1205;border:0}"
+        ".banner b{display:block;font-size:15px;margin-bottom:2px}"
+        ".banner span{font-size:12px;opacity:.88}"
+        "</style></head><body>"
+        "<div class='top'><div><div class='brand'>Docs</div>"
+        "<div class='hubtag'>GNBD MINI-radio UI Editor v0.1.0 beta</div></div>"
+        "<a class='pill gray' href='/'>Hub</a></div>"
+        "<main class='wrap doc'>"
+
+        "<section class='card banner'><div><b>UI Editor v0.1.0 beta</b>"
+        "<span>Runtime UI editor for the 320x170 screen</span></div></section>"
+
+        "<section class='card' style='border-color:#ffd8a8;background:#fff7ec'>"
+        "<div class='sec' style='color:#a15c00'>BETA NOTICE</div>"
+        "<p style='font-size:13px;line-height:1.7;color:#4a3a24'>This editor is "
+        "<b>beta software</b> and is not feature-complete. Features may be changed or "
+        "removed without notice, and bugs or device crashes (reboots, freezes) can occur. "
+        "Always keep a <b>download</b> backup of important layouts.</p></section>"
+
+        "<section class='card'><div class='sec'>QUICK START</div>"
+        "<ul><li>Hub &rarr; <b>UI Editor</b></li>"
+        "<li>Choose the layout tab: <b>FM / AM / SSB</b> (each is separate)</li>"
+        "<li>Drag a module from the palette onto the canvas</li>"
+        "<li>Press <b>Save to radio</b> &mdash; the radio applies it instantly</li></ul>"
+        "</section>"
+
+        "<section class='card'><div class='sec'>LAYOUTS</div>"
+        "<ul><li>FM / AM / SSB each keep their own widget list and palette</li>"
+        "<li>A widget can be limited to specific modes in Properties</li>"
+        "<li>Screen: 320 &times; 170 px, default snap 4 px</li></ul>"
+        "</section>"
+
+        "<section class='card'><div class='sec'>MODULES</div>"
+        "<h3>Screen modules</h3>"
+        "<ul><li><span class='k'>Header</span>clock, Wi-Fi state, battery voltage,"
+        " 4-bar signal icon</li>"
+        "<li><span class='k'>Band</span>band / mode / stereo row</li>"
+        "<li><span class='k'>Frequency</span>large digits + unit</li>"
+        "<li><span class='k'>RSSI / SNR</span>two bars with numbers</li>"
+        "<li><span class='k'>Param grid</span>BW / BFO / AGC lines</li>"
+        "<li><span class='k'>INFO card</span>RDS in FM, EiBi in AM/SSB</li>"
+        "<li><span class='k'>SIG graph</span>RSSI/SNR history</li>"
+        "<li><span class='k'>Band map</span>centered dial</li>"
+        "<li><span class='k'>Panel</span>MENU/SETTINGS guide, horizontal or vertical</li></ul>"
+        "<h3>Primitives</h3>"
+        "<ul><li><b>Signal icon</b> &mdash; 4-bar Wi-Fi level, place anywhere,"
+        " any size (bars scale with the box), color is editable</li>"
+        "<li><b>Text</b>, <b>Bar</b>, <b>Rect</b>, <b>Line</b>, <b>Toast</b></li></ul>"
+        "</section>"
+
+        "<section class='card'><div class='sec'>EDITING</div>"
+        "<h3>Selection</h3>"
+        "<ul><li>Click to select, Shift+click for multi-select</li>"
+        "<li>Delete to remove, Ctrl+D duplicate, Ctrl+Z / Ctrl+Shift+Z undo/redo</li>"
+        "<li>Arrow keys nudge, Shift+Arrow moves 8 px</li></ul>"
+        "<h3>Resize</h3>"
+        "<ul><li>Selected widgets show <b>8 blue handles</b> (4 corners + 4 edges)</li>"
+        "<li>Drag any handle to resize from that side</li>"
+        "<li>Minimum 8 &times; 4 px, stays inside the screen</li></ul>"
+        "<h3>Alignment guides</h3>"
+        "<ul><li>While moving, edges and centers snap to other widgets and to the"
+        " screen center</li>"
+        "<li>Red dashed lines show the alignment axis (within 4 px)</li></ul>"
+        "<h3>Zoom</h3>"
+        "<ul><li>Use the <b>Zoom</b> slider (50&ndash;200%%) next to Snap</li>"
+        "<li>Pick the anchor: center or top-left</li>"
+        "<li>Ctrl + mouse wheel also zooms</li></ul>"
+        "</section>"
+
+        "<section class='card'><div class='sec'>COLORS</div>"
+        "<ul><li>16 palette slots: background, panel, accent, text and more</li>"
+        "<li>Edits apply to the radio immediately after saving</li>"
+        "<li><b>Reset colors</b> restores the firmware dark theme</li></ul>"
+        "</section>"
+
+        "<section class='card'><div class='sec'>SAVE &amp; LOAD</div>"
+        "<ul><li><b>Save to radio</b> writes a named layout and activates it</li>"
+        "<li><b>UI List</b> loads or deletes saved layouts</li>"
+        "<li><b>Download</b> exports a <code>.mrpack</code> project file</li>"
+        "<li>Names: letters, digits, <code>_</code>, <code>-</code> (1&ndash;24)</li>"
+        "<li>Limits: 128 widgets per layout, 16 KB layout file</li></ul>"
+        "</section>"
+
+        "<section class='card'><div class='sec'>THEME &amp; MENUS</div>"
+        "<ul><li>Custom themes pick up the saved layout palette</li>"
+        "<li>MENU/SETTINGS follow the panel position and orientation</li>"
+        "<li>Horizontal panels scroll one item at a time at the edges</li></ul>"
+        "</section>"
+
+        "<section class='card'><div class='sec'>LICENSE</div>"
+        "<p>Editor and firmware code: MIT. Bundled components keep their own"
+        " licenses (lovyan_gfx, littlefs, ESP-IDF, display). See the Licenses"
+        " page on the radio for the full notices.</p>"
+        "<a class='btn' style='width:100%%;margin-top:10px' href='/licenses'>"
+        "Open Licenses</a></section>"
+
+        "<div class='hubfoot'>Designed &amp; developed by <b>@gnbd</b><br>"
+        "<a href='https://gnbdatsmini.netlify.app/docs' target='_blank'"
+        " rel='noopener noreferrer'>gnbdatsmini.netlify.app</a></div>"
+        "</main></body></html>", WEB_STYLE);
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, page, n < 0 ? 0 : (size_t)n);
+}
+
+esp_err_t http_radio_handler(httpd_req_t *req)
 {
     if (!s_setup_done) {
         httpd_resp_set_status(req, "303 See Other");
@@ -618,12 +816,12 @@ static bool basic_auth_ok(httpd_req_t *req)
     return strcmp(h, s_web_pass) == 0;
 }
 
-static bool web_authorized(httpd_req_t *req)
+bool web_authorized(httpd_req_t *req)
 {
     return !s_setup_done || !s_web_auth_on || basic_auth_ok(req);
 }
 
-static esp_err_t web_require_auth(httpd_req_t *req)
+esp_err_t web_require_auth(httpd_req_t *req)
 {
     httpd_resp_set_status(req, "401 Unauthorized");
     httpd_resp_set_hdr(req, "WWW-Authenticate",
@@ -1200,7 +1398,8 @@ bool web_cmd_push(const web_cmd_t *c)
 
 bool web_back_target(const char *back, char *out, size_t n)
 {
-    if (strcmp(back, "/") == 0 || strcmp(back, "/presets") == 0 ||
+    if (strcmp(back, "/") == 0 || strcmp(back, "/radio") == 0 ||
+        strcmp(back, "/presets") == 0 ||
         strcmp(back, "/wifi") == 0 || strcmp(back, "/info") == 0) {
         size_t l = strlen(back);
         if (l < n) {
@@ -1393,6 +1592,24 @@ esp_err_t http_cmd_handler(httpd_req_t *req)
                 return ESP_FAIL;
             }
         }
+    } else if (httpd_query_key_value(q, "ui", val, sizeof(val)) == ESP_OK) {
+        if (strncmp(val, "RM_MOD_", 7) == 0 && val[7] >= 'A' && val[7] <= 'H' &&
+            val[8] == '\0') {
+            c.type = WEB_CMD_UI_EVENT;
+            snprintf(c.s1, sizeof(c.s1), "%.*s", (int)sizeof(c.s1) - 1, val);
+        } else {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad ui");
+            return ESP_FAIL;
+        }
+    } else if (httpd_query_key_value(q, "setui", val, sizeof(val)) == ESP_OK) {
+        if (strncmp(val, "ST_MOD_", 7) == 0 && val[7] >= 'A' && val[7] <= 'H' &&
+            val[8] == '\0') {
+            c.type = WEB_CMD_UI_EVENT;
+            snprintf(c.s1, sizeof(c.s1), "%.*s", (int)sizeof(c.s1) - 1, val);
+        } else {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad setui");
+            return ESP_FAIL;
+        }
     } else if (httpd_query_key_value(q, "wifi", val, sizeof(val)) == ESP_OK) {
         if (strcmp(val, "off") == 0) {
             c.type = WEB_CMD_WIFI_OFF;
@@ -1491,8 +1708,95 @@ esp_err_t http_presets_handler(httpd_req_t *req)
     if (!web_authorized(req)) {
         return web_require_auth(req);
     }
+    if (req->method == HTTP_POST) {
+        if (!request_is_same_origin(req)) {
+            httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden");
+            return ESP_FAIL;
+        }
+        char body[192];
+        int len = httpd_req_recv(req, body, sizeof(body) - 1);
+        const char *err = NULL;
+        if (len > 0) {
+            body[len] = '\0';
+            char act[8];
+            form_get(body, "add", act, sizeof(act));
+            if (act[0] == '1') {
+                /* 수동 추가: band + mode + freq */
+                char sb[8];
+                char sm[8];
+                char sf[24];
+                form_get(body, "band", sb, sizeof(sb));
+                form_get(body, "mode", sm, sizeof(sm));
+                form_get(body, "f", sf, sizeof(sf));
+                int bi = atoi(sb);
+                char *end = NULL;
+                double fv = strtod(sf, &end);
+                if (bi < 0 || bi >= (int)band_count || end == sf || fv <= 0) {
+                    err = "bad";
+                } else {
+                    const band_desc_t *bd = &band_table[bi];
+                    bool mhz = (bd->default_mode == RADIO_MODE_FM) ||
+                               (strchr(sf, '.') != NULL);
+                    double hz = mhz ? fv * 1000000.0 : fv * 1000.0;
+                    uint32_t f = (uint32_t)(hz + 0.5);
+                    f = band_clamp_freq(bi, f);
+                    f = band_snap_freq(bi, f, bd->step_hz);
+                    int mode = (int)bd->default_mode;
+                    if (mode != RADIO_MODE_FM) {
+                        if (strcmp(sm, "LSB") == 0) {
+                            mode = RADIO_MODE_LSB;
+                        } else if (strcmp(sm, "USB") == 0) {
+                            mode = RADIO_MODE_USB;
+                        } else {
+                            mode = RADIO_MODE_AM;
+                        }
+                    }
+                    if (preset_index_for_freq(f, bi) >= 0) {
+                        err = "dup";
+                    } else if (s_presets.count >= STORAGE_PRESET_SLOTS) {
+                        err = "full";
+                    } else {
+                        web_cmd_t nc;
+                        memset(&nc, 0, sizeof(nc));
+                        nc.type = WEB_CMD_PRESET_ADD;
+                        nc.a = (int32_t)f;
+                        nc.b = ((int32_t)bi << 8) | (mode & 0xFF);
+                        if (!web_cmd_push(&nc)) {
+                            err = "busy";
+                        }
+                    }
+                }
+            } else {
+                char si[8];
+                char nm[STORAGE_NAME_LEN];
+                form_get(body, "i", si, sizeof(si));
+                form_get(body, "n", nm, sizeof(nm));
+                int idx = atoi(si);
+                if (idx >= 0 && idx < STORAGE_PRESET_SLOTS) {
+                    snprintf(s_pnames.name[idx], STORAGE_NAME_LEN, "%s", nm);
+                    storage_save_names(&s_pnames);
+                    if (s_hmi == HMI_FAV) {
+                        fav_side_draw();
+                    }
+                }
+            }
+        }
+        char loc[40];
+        if (err) {
+            snprintf(loc, sizeof(loc), "/presets?err=%s", err);
+        } else {
+            snprintf(loc, sizeof(loc), "/presets");
+        }
+        httpd_resp_set_status(req, "303 See Other");
+        httpd_resp_set_hdr(req, "Location", loc);
+        httpd_resp_set_type(req, "text/plain");
+        return httpd_resp_send(req, "OK", 2);
+    }
     char q[128];
     char val[16];
+    int edit = -1;
+    char err_key[16] = "";
+    bool save_dup = false;
     web_cmd_t c;
     memset(&c, 0, sizeof(c));
 
@@ -1504,8 +1808,24 @@ esp_err_t http_presets_handler(httpd_req_t *req)
                 return ESP_FAIL;
             }
         } else if (httpd_query_key_value(q, "save", val, sizeof(val)) == ESP_OK) {
-            c.type = WEB_CMD_PRESET_SAVE;
+            if (preset_index_for_freq(s_ui.freq_hz, s_ui.band_idx) >= 0) {
+                save_dup = true;   /* 이미 등록된 주파수 */
+            } else {
+                c.type = WEB_CMD_PRESET_SAVE;
+            }
+        } else if (httpd_query_key_value(q, "edit", val, sizeof(val)) == ESP_OK) {
+            int e = atoi(val);
+            edit = (e >= 0 && e < STORAGE_PRESET_SLOTS) ? e : -1;
         }
+        if (httpd_query_key_value(q, "err", val, sizeof(val)) == ESP_OK) {
+            snprintf(err_key, sizeof(err_key), "%s", val);
+        }
+    }
+    if (save_dup) {
+        httpd_resp_set_status(req, "303 See Other");
+        httpd_resp_set_hdr(req, "Location", "/presets?err=dup");
+        httpd_resp_set_type(req, "text/plain");
+        return httpd_resp_send(req, "OK", 2);
     }
     if (c.type != WEB_CMD_NONE) {
         if (!web_cmd_push(&c)) {
@@ -1521,6 +1841,23 @@ esp_err_t http_presets_handler(httpd_req_t *req)
     char nav[2048];
     web_nav(nav, sizeof(nav), 1);
 
+    char err_html[192] = "";
+    if (strcmp(err_key, "dup") == 0) {
+        snprintf(err_html, sizeof(err_html),
+                 "<div class='err'>Already saved: same band and "
+                 "frequency.</div>");
+    } else if (strcmp(err_key, "full") == 0) {
+        snprintf(err_html, sizeof(err_html),
+                 "<div class='err'>Preset list is full (%d).</div>",
+                 STORAGE_PRESET_SLOTS);
+    } else if (strcmp(err_key, "busy") == 0) {
+        snprintf(err_html, sizeof(err_html),
+                 "<div class='err'>Device busy. Try again.</div>");
+    } else if (err_key[0]) {
+        snprintf(err_html, sizeof(err_html),
+                 "<div class='err'>Invalid band or frequency.</div>");
+    }
+
     int n = snprintf(page, sizeof(page),
         "<!doctype html><html><head><meta charset='utf-8'>" WEB_THEME_HEAD
         "<meta name='viewport' content='width=device-width,initial-scale=1,"
@@ -1528,8 +1865,52 @@ esp_err_t http_presets_handler(httpd_req_t *req)
         "<title>Presets - MINI-radio</title><style>%s</style></head><body>"
         "<div class='top'><div class='brand'>Presets</div>"
         "<span class='pill'>%d / %d</span></div>"
-        "<main class='wrap'><section class='card'>",
-        WEB_STYLE, s_presets.count, STORAGE_PRESET_SLOTS);
+        "<main class='wrap'><section class='card'>"
+        "<div class='sec'>ADD PRESET</div>%s"
+        "<form class='addp' method='post' action='/presets'>"
+        "<input type='hidden' name='add' value='1'>"
+        "<select name='band'>",
+        WEB_STYLE, s_presets.count, STORAGE_PRESET_SLOTS, err_html);
+    if (n < 0) {
+        n = 0;
+    } else if (n > (int)sizeof(page) - 1) {
+        n = (int)sizeof(page) - 1;
+    }
+
+    for (size_t i = 0; i < band_count && n < (int)sizeof(page) - 1; ++i) {
+        char be[48];
+        html_escape(be, sizeof(be), band_table[i].name);
+        int w = snprintf(page + n, sizeof(page) - (size_t)n,
+                         "<option value='%u'>%s</option>", (unsigned)i, be);
+        if (w < 0) {
+            break;
+        }
+        n += w;
+    }
+    if (n > (int)sizeof(page) - 1) {
+        n = (int)sizeof(page) - 1;
+    }
+
+    {
+        int w = snprintf(page + n, sizeof(page) - (size_t)n,
+            "</select>"
+            "<select name='mode'><option>FM</option><option>AM</option>"
+            "<option>LSB</option><option>USB</option></select>"
+            "<input name='f' inputmode='decimal' required"
+            " placeholder='89.10 (FM MHz) / 1200 (kHz)'>"
+            "<button class='btn primary' type='submit'>+ Add</button></form>"
+            "<div class='hint'>FM bands use MHz, others use kHz. FM bands "
+            "are always saved as FM. Duplicates are rejected.</div>"
+            "</section><section class='card'>");
+        if (w > 0) {
+            n += w;
+        }
+        if (n < 0) {
+            n = 0;
+        } else if (n > (int)sizeof(page) - 1) {
+            n = (int)sizeof(page) - 1;
+        }
+    }
 
     if (s_presets.count == 0) {
         n += snprintf(page + n, sizeof(page) - (size_t)n,
@@ -1544,18 +1925,42 @@ esp_err_t http_presets_handler(httpd_req_t *req)
         fmt_freq_web(p->freq_hz, (radio_mode_t)p->mode, f, sizeof(f));
         char bn_esc[48];
         html_escape(bn_esc, sizeof(bn_esc), bn);
+        char nm_esc[64];
+        html_escape(nm_esc, sizeof(nm_esc), s_pnames.name[i]);
+        char small[192];
+        if (nm_esc[0]) {
+            snprintf(small, sizeof(small), "%s &middot; %s &middot; %s",
+                     nm_esc, bn_esc, mode_str((radio_mode_t)p->mode));
+        } else {
+            snprintf(small, sizeof(small), "%s &middot; %s",
+                     bn_esc, mode_str((radio_mode_t)p->mode));
+        }
         int w = snprintf(page + n, sizeof(page) - (size_t)n,
                          "<div class='item'><a class='pick' href='/api/cmd?"
                          "preset=%d&back=/presets'><span class='num'>P%02d</span>"
-                         "<span class='txt'><b>%s</b><small>%s &middot; %s</small>"
-                         "</span></a><a class='del' href='/api/cmd?del=%d"
+                         "<span class='txt'><b>%s</b><small>%s</small>"
+                         "</span></a><a class='del' href='/presets?edit=%d'>Name</a>"
+                         "<a class='del' href='/api/cmd?del=%d"
                          "&back=/presets'>Delete</a></div>",
-                         i, i + 1, f, bn_esc,
-                         mode_str((radio_mode_t)p->mode), i);
+                         i, i + 1, f, small, i, i);
         if (w < 0) {
             break;
         }
         n += w;
+        if (i == edit) {
+            /* 이름 편집 중인 행에만 입력 폼을 붙인다 (페이지 크기 절약) */
+            w = snprintf(page + n, sizeof(page) - (size_t)n,
+                         "<form class='nmf' method='post' action='/presets'>"
+                         "<input type='hidden' name='i' value='%d'>"
+                         "<input name='n' maxlength='15' value='%s'"
+                         " placeholder='station name'>"
+                         "<button class='del' type='submit'>Set</button></form>",
+                         i, nm_esc);
+            if (w < 0) {
+                break;
+            }
+            n += w;
+        }
     }
     if (n < 0) {
         n = 0;
@@ -1760,7 +2165,11 @@ esp_err_t http_settings_handler(httpd_req_t *req)
         "<option value='auto'>Auto</option><option value='light'>Light</option>"
         "<option value='dark'>Dark</option></select></div>"
         "<div class='hint'>Auto follows your device setting.</div>"
-        "</section><section class='card'><div class='sec'>WEB LOGIN</div>"
+        "</section><section class='card'><div class='sec'>UI EDITOR</div>"
+        "<a class='btn primary' style='width:100%%' href='/ui/'>Open UI Editor</a>"
+        "<div class='hint'>Saved layouts are applied immediately and appear as "
+        "THEME &gt; CUSTOM UI.</div></section>"
+        "<section class='card'><div class='sec'>WEB LOGIN</div>"
         "<div class='setrow'><span class='k'>Require login</span>"
         "<label class='switch'><input type='checkbox' id='wa'"
         " onchange='setWebAuth(this.checked)' %s>"
@@ -1842,7 +2251,7 @@ void http_start(void)
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.server_port = 80;
     cfg.stack_size = 12288;
-    cfg.max_uri_handlers = 16;
+    cfg.max_uri_handlers = 96;
     if (httpd_start(&s_http, &cfg) != ESP_OK) {
         s_http = NULL;
         return;
@@ -1851,6 +2260,18 @@ void http_start(void)
         .uri = "/",
         .method = HTTP_GET,
         .handler = http_root_handler,
+        .user_ctx = NULL,
+    };
+    httpd_uri_t docs = {
+        .uri = "/docs",
+        .method = HTTP_GET,
+        .handler = http_docs_handler,
+        .user_ctx = NULL,
+    };
+    httpd_uri_t radio = {
+        .uri = "/radio",
+        .method = HTTP_GET,
+        .handler = http_radio_handler,
         .user_ctx = NULL,
     };
     httpd_uri_t status = {
@@ -1880,6 +2301,12 @@ void http_start(void)
     httpd_uri_t presets = {
         .uri = "/presets",
         .method = HTTP_GET,
+        .handler = http_presets_handler,
+        .user_ctx = NULL,
+    };
+    httpd_uri_t presets_post = {
+        .uri = "/presets",
+        .method = HTTP_POST,
         .handler = http_presets_handler,
         .user_ctx = NULL,
     };
@@ -1931,13 +2358,17 @@ void http_start(void)
     httpd_register_uri_handler(s_http, &setup_api);
     httpd_register_uri_handler(s_http, &licenses);
     httpd_register_uri_handler(s_http, &root);
+    httpd_register_uri_handler(s_http, &docs);
+    httpd_register_uri_handler(s_http, &radio);
     httpd_register_uri_handler(s_http, &status);
     httpd_register_uri_handler(s_http, &cmd);
     httpd_register_uri_handler(s_http, &wifi_api);
     httpd_register_uri_handler(s_http, &info);
     httpd_register_uri_handler(s_http, &presets);
+    httpd_register_uri_handler(s_http, &presets_post);
     httpd_register_uri_handler(s_http, &wifi);
     httpd_register_uri_handler(s_http, &settings);
+    ui_web_register(s_http);
 }
 
 void http_stop(void)

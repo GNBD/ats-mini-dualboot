@@ -19,6 +19,7 @@ bool               s_ssb_prepared;
 ui_state_t         s_ui;
 storage_settings_t s_cfg;
 preset_bank_t      s_presets;
+storage_names_t    s_pnames;
 rds_info_t         s_rds;
 battery_state_t    s_batt;
 
@@ -38,6 +39,7 @@ bool     s_sleep_armed;
 
 storage_ext_t s_ext;
 bool     s_agc_on = true;
+uint8_t  s_rfgain = 0;   /* 0=AUTO (RF AGC 자동) */
 uint8_t  s_softmute = 4;
 uint8_t  s_avc = 60;
 bool     s_squelch_on = false;
@@ -50,7 +52,6 @@ uint8_t  s_batt_view = 3;
 int16_t  s_batt_cal_mv;
 uint16_t s_screen_sec = 0;
 uint8_t  s_unit_mode = 0;
-uint8_t  s_ui_mode = 1;
 bool     s_setup_done;
 bool     s_digit_mode;
 int      s_digit_place;
@@ -141,6 +142,8 @@ bool     s_eibi_yes;
 storage_splash_t s_splash;
 
 uint16_t s_quick_mask = 0x000F;
+uint8_t  s_dbg_sig = 1;   /* 0=LOW(250ms), 1=HIGH(30ms) */
+uint8_t  s_sig_view;  /* SIG 칸 표시 (0=그래프) */
 int      s_qcfg_cur;
 int      s_qcfg_top;
 const char *const QA_LABELS[QA_COUNT] = {

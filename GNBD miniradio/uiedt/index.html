@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GNBD MINI-radio UI Editor</title>
+<link rel="stylesheet" href="css/app.css?v=44">
+</head>
+<body>
+<div id="boot" class="boot" role="status" aria-live="polite">
+  <div class="bootbox">
+    <div class="bootlogo"><b class="gb">GNBD</b> MINI&middot;radio</div>
+    <div class="bootsub">UI Editor</div>
+    <div class="bootver">v0.1.0 beta</div>
+    <div class="bootbar"><i></i></div>
+    <div class="bootmsg" data-i18n="에디터를 불러오는 중...">에디터를 불러오는 중...</div>
+  </div>
+</div>
+<div id="notice" class="notice" hidden>
+  <span class="ndot">BETA</span>
+  <span class="ntext" data-i18n="UI Editor v0.1.0 beta · 자세한 사용법은 Docs에서 확인하세요.">UI Editor v0.1.0 beta · 자세한 사용법은 Docs에서 확인하세요.</span>
+  <a class="nbtn" href="https://gnbdatsmini.netlify.app/docs" target="_blank" rel="noopener noreferrer" data-i18n="자세한 내용">자세한 내용</a>
+  <button id="noticeClose" class="nclose" aria-label="close">&times;</button>
+</div>
+<header class="top">
+  <div class="brand"><b>GNBD</b> MINI&middot;radio <b>UI Editor</b> <span class="tag">v0.1.0 beta</span></div>
+  <input id="projName" class="pname" value="my-ui" title="project name">
+  <span id="dirtyDot" class="dirtydot" data-i18n-title="저장 안 됨 — Download로 저장하세요" title="저장 안 됨 — Download로 저장하세요">●</span>
+  <label class="chk"><input type="checkbox" id="previewChk"> <span data-i18n="미리보기">미리보기</span></label>
+  <label class="chk" data-i18n-title="스냅 사용"><input type="checkbox" id="gridChk" checked> <span data-i18n="스냅">스냅</span></label>
+  <select id="gridSize" class="sel" data-i18n-title="스냅 간격" title="스냅 간격">
+    <option value="1" selected>1px</option><option value="2">2px</option>
+    <option value="4">4px</option><option value="8">8px</option>
+    <option value="10">10px</option>
+  </select>
+  <a id="btnDocs" class="btn primary" href="https://gnbdatsmini.netlify.app/docs" target="_blank" rel="noopener noreferrer" data-i18n="문서">문서</a>
+  <span class="sp"></span>
+  <button id="btnUndo" class="btn" data-i18n="실행취소">실행취소</button>
+  <button id="btnRedo" class="btn" data-i18n="다시 실행">다시 실행</button>
+  <button id="btnNew" class="btn" data-i18n="새로 만들기">새로 만들기</button>
+  <button id="btnImport" class="btn" data-i18n="가져오기">가져오기</button>
+  <button id="btnExport" class="btn primary" data-i18n-title="UI 프로젝트 파일 다운로드" title="UI 프로젝트 파일 다운로드" data-i18n="다운로드">다운로드</button>
+  <button id="btnRadioSave" class="btn primary" data-i18n-title="라디오에 저장하고 즉시 적용" title="라디오에 저장하고 즉시 적용" data-i18n="라디오에 저장">라디오에 저장</button>
+  <button id="btnRadioManage" class="btn" data-i18n-title="저장된 UI 목록/불러오기/삭제" title="저장된 UI 목록/불러오기/삭제" data-i18n="UI 목록">UI 목록</button>
+
+  <span id="radioStatus" class="rstatus"></span>
+  <button id="langBtn" class="btn" title="Language">KO</button>
+  <input type="file" id="fileIn" accept=".json,.mrpack" hidden>
+</header>
+
+<main class="wrap">
+  <aside class="palette" id="palette">
+    <div class="psearch"><input id="search" data-i18n-ph="모듈 검색..." placeholder="모듈 검색..."></div>
+    <div id="paletteBody"></div>
+  </aside>
+
+  <section class="stage" id="stage">
+    <div class="stageui" id="stageUI">
+      <div class="aligntools">
+        <span class="lb" data-i18n="정렬">정렬</span>
+        <button class="tb" data-align="left" data-i18n-title="왼쪽 맞춤" title="왼쪽 맞춤">L</button>
+        <button class="tb" data-align="hcenter" data-i18n-title="가로 가운데" title="가로 가운데">C</button>
+        <button class="tb" data-align="right" data-i18n-title="오른쪽 맞춤" title="오른쪽 맞춤">R</button>
+        <span class="sp2"></span>
+        <button class="tb" data-align="top" data-i18n-title="위쪽 맞춤" title="위쪽 맞춤">T</button>
+        <button class="tb" data-align="vcenter" data-i18n-title="세로 가운데" title="세로 가운데">M</button>
+        <button class="tb" data-align="bottom" data-i18n-title="아래쪽 맞춤" title="아래쪽 맞춤">B</button>
+        <span class="sp2"></span>
+        <button class="tb" data-align="width" data-i18n-title="같은 너비" title="같은 너비">W=</button>
+        <button class="tb" data-align="height" data-i18n-title="같은 높이" title="같은 높이">H=</button>
+        <span class="sp2"></span>
+        <button class="tb" data-align="disth" data-i18n-title="가로 균등 분배" title="가로 균등 분배">⇹</button>
+        <button class="tb" data-align="distv" data-i18n-title="세로 균등 분배" title="세로 균등 분배">⇳</button>
+        <span class="sp2"></span>
+        <span class="lb" data-i18n="레이아웃">레이아웃</span>
+        <button class="tb pmode on" data-pmode="0" data-i18n-title="FM 레이아웃" title="FM 레이아웃">FM</button>
+        <button class="tb pmode" data-pmode="1" data-i18n-title="AM 레이아웃" title="AM 레이아웃">AM</button>
+        <button class="tb pmode" data-pmode="2" data-i18n-title="SSB 레이아웃" title="SSB 레이아웃">SSB</button>
+        <span class="sp2"></span>
+        <span class="lb" data-i18n="확대">확대</span>
+        <input id="zoomRange" class="rng" type="range" min="50" max="200" step="10" value="100" data-i18n-title="확대 비율" title="확대 비율">
+        <span id="zoomVal" class="zoomval">100%</span>
+        <select id="zoomAnchor" class="sel" data-i18n-title="확대 기준점" title="확대 기준점">
+          <option value="center" data-i18n="중앙">중앙</option>
+          <option value="topleft" data-i18n="좌상단">좌상단</option>
+        </select>
+        <span class="sp2"></span>
+        <span class="lb" id="selInfo">0 selected</span>
+      </div>
+      <div class="canvasBox">
+        <canvas id="screen" width="640" height="340"></canvas>
+        <div class="hintbar" id="hud" data-i18n="FM/AM/SSB는 각각 별도 레이아웃 · 드래그로 배치 · Delete 삭제">FM/AM/SSB는 각각 별도 레이아웃 · 드래그로 배치 · Delete 삭제</div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="props" id="props">
+    <div class="ptitle" data-i18n="레이어">레이어</div>
+    <div id="layersBody" class="layers"></div>
+    <div class="ptitle" data-i18n="색상">색상</div>
+    <div id="colorsBody" class="colors"></div>
+    <div class="ptitle" data-i18n="속성">속성</div>
+    <div id="propsBody" class="pbody"></div>
+  </aside>
+
+  <div id="tip" class="tip" hidden>
+    <canvas id="tipCanvas" width="640" height="340"></canvas>
+    <div class="tt"><b id="tipName"></b><span id="tipSub"></span><span id="tipColors" class="tc"></span></div>
+  </div>
+</main>
+
+<script src="js/i18n.js?v=44"></script>
+<script src="js/core/schema.js?v=44"></script>
+<script src="js/core/project.js?v=44"></script>
+<script src="js/core/validate.js?v=44"></script>
+<script src="js/core/layout_c.js?v=44"></script>
+<script src="js/core/runtime.js?v=44"></script>
+<script src="js/catalog.js?v=44"></script>
+<script src="js/render.js?v=44"></script>
+<script src="js/editor.js?v=44"></script>
+<script src="js/properties.js?v=44"></script>
+<script src="js/palette.js?v=44"></script>
+<script src="js/layers.js?v=44"></script>
+<script src="js/recent_colors.js?v=44"></script>
+<script src="js/colors.js?v=44"></script>
+<script src="js/export.js?v=44"></script>
+<script src="js/radio.js?v=44"></script>
+<script src="js/modal.js?v=44"></script>
+<script src="js/app.js?v=44"></script>
+</body>
+</html>

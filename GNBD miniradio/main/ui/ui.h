@@ -104,7 +104,6 @@ typedef struct {
     bool          have_battery;
     uint8_t       batt_view;     /* 0=icon,1=volt,2=%,3=%+icon,4=volt+icon */
     uint8_t       unit_mode;     /* 0=MHz, 1=kHz */
-    uint8_t       ui_mode;       /* 0=easy, 1=standard */
     char          clock[6];      /* "HH:MM" */
     char          date[12];      /* "YYYY-MM-DD" */
     bool          save_active;
@@ -138,6 +137,7 @@ typedef struct {
     int value;
     const char *unit;      /* 값 접미사 (예: "%", " dB", "m") */
     const char *zero_label;/* value==0 일 때 대신 표시 (예: "OFF") */
+    int value_offset;      /* 표시값 보정 (표시 = value + offset, 기본 0) */
     bool live;             /* true = 회전 시 즉시 적용 */
 } ui_options_t;
 
@@ -164,19 +164,13 @@ char ui_keypad_char(int idx, bool upper, bool sym);
 
 void ui_init(void);
 void ui_theme_set(int theme);
-void ui_draw_all(const ui_state_t *s);        /* RADIO 페이지 전체 */
+void ui_draw_all(const ui_state_t *s);
+void ui_draw_sleep_badge(void);        /* RADIO 페이지 전체 */
 void ui_draw_radio_freq(const ui_state_t *s); /* 모드별 주파수 갱신 */
-void ui_draw_dx_signal(const ui_state_t *s);
-void ui_draw_dx_signal2(const ui_state_t *s);
-void ui_draw_dx_signal3(const ui_state_t *s);
 void ui_draw_adv_signal4(const ui_state_t *s);
 void ui_draw_adv_signal4b(const ui_state_t *s);
 void ui_draw_header(const ui_state_t *s);     /* RADIO 탭 헤더만 */
-void ui_draw_freq(const ui_state_t *s);
 void ui_draw_band_meta(const ui_state_t *s);
-void ui_draw_freq_saved(void);
-void ui_draw_smeter(const ui_state_t *s);
-void ui_draw_rds(const ui_state_t *s);
 void ui_draw_status(const ui_state_t *s);
 void ui_draw_volume(const ui_state_t *s, bool show);
 void ui_draw_loading(const char *msg);

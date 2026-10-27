@@ -18,6 +18,17 @@ const char *app_version(void)
     return (d && d->version[0]) ? d->version : "?";
 }
 
+const char *app_version_short(void)
+{
+    static char out[48];
+    const char *v = app_version();
+    const char *sp = strrchr(v, ' ');
+    const char *p = sp ? sp + 1 : v;
+    if (!p || !p[0]) p = v;
+    snprintf(out, sizeof(out), "%s", p);
+    return out;
+}
+
 const char *app_project_name(void)
 {
     const esp_app_desc_t *d = esp_app_get_description();

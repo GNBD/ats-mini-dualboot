@@ -17,6 +17,8 @@ void decode_stop(void);
 bool decode_poll(uint32_t now);
 void decode_cycle_mode(void);
 void decode_cycle_gpio(int dir);
+void decode_set_gpio(int pin);
+void decode_set_mode(int idx);
 
 bool        decode_running(void);
 const char *decode_mode_str(void);

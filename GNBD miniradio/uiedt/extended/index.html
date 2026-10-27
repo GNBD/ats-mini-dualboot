@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EXTENDED Editor v0.2.0 beta</title>
+<link rel="stylesheet" href="../css/app.css?v=43">
+<style>
+  .tabs{display:flex;gap:6px;padding:8px 12px 0;background:#f4f6fb;
+        border-bottom:1px solid #e4e7ec}
+  .tabs button{border:1px solid #e4e7ec;border-bottom:0;background:#fff;
+        border-radius:8px 8px 0 0;padding:8px 16px;font:inherit;font-weight:700;
+        font-size:12px;color:#667085;cursor:pointer}
+  .tabs button.on{background:#0072de;border-color:#0072de;color:#fff}
+  .panel{display:none;padding:12px;gap:12px}
+  .panel.on{display:grid;grid-template-columns:340px 1fr 300px}
+  @media(max-width:1000px){.panel.on{display:block}}
+  .pcard{background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:12px;
+         box-shadow:0 1px 2px rgba(16,24,40,.06)}
+  .pcard h3{margin:0 0 10px;font-size:12px;color:#667085;letter-spacing:.04em}
+  .pcard label{display:block;font-size:11px;color:#667085;margin:8px 0 4px}
+  .pcard input,.pcard select,.pcard textarea{width:100%;border:1px solid #e4e7ec;
+    border-radius:8px;padding:7px 8px;font:inherit;background:#fbfcfe}
+  .pcard textarea{font-family:Consolas,monospace;font-size:12px;resize:vertical}
+  .pcard textarea.script{min-height:320px}
+  .prow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .pbtn{border:1px solid #e4e7ec;background:#fff;border-radius:8px;
+        padding:7px 11px;font:inherit;font-weight:600;font-size:12px;cursor:pointer}
+  .pbtn.primary{background:#0072de;border-color:#0072de;color:#fff}
+  .pbtn.danger{color:#b42318;border-color:#fecdca}
+  .pmsg{margin-top:10px;font-size:12px;white-space:pre-wrap;word-break:break-word}
+  .pmsg.ok{color:#067647}.pmsg.err{color:#b42318}.pmsg.warn{color:#b54708}
+  ul.plist{list-style:none;margin:0;padding:0;max-height:340px;overflow:auto}
+  ul.plist li{display:flex;align-items:center;gap:6px;padding:6px;
+              border-bottom:1px solid #eef2f7;font-size:12px}
+  ul.plist li span.n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+                     white-space:nowrap}
+  .ptag{font-size:10px;border:1px solid #e4e7ec;border-radius:999px;
+        padding:1px 6px;color:#667085}
+  .phint{font-size:11px;color:#667085;margin-top:6px}
+  .blkpalette{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .blkadd{border:1px solid #cfd6e4;background:#fbfcfe;border-radius:8px;
+          padding:6px 9px;font:inherit;font-size:11px;font-weight:700;cursor:pointer}
+  .blkadd:hover{border-color:#0072de;color:#0072de}
+  .blkstack{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+  .blk{display:flex;align-items:center;gap:6px;background:#eef4ff;
+       border:1px solid #b9d4f8;border-left:6px solid #0072de;
+       border-radius:8px;padding:6px 8px}
+  .blk .blkname{font-size:11px;font-weight:700;color:#0b4a8f;min-width:96px}
+  .blk input,.blk select{border:1px solid #cfd6e4;border-radius:6px;
+       padding:3px 5px;font:inherit;font-size:11px;background:#fff;max-width:120px}
+  .blk .grip{color:#7aa7d8;font-size:11px;cursor:grab;user-select:none}
+  .blk.ctrl{background:#fff4e5;border-color:#f7c98b;border-left-color:#f79009}
+  .blk.ctrl .blkname{color:#8a4b00}
+  .blkadd.ctrl{background:#fff4e5;border-color:#f7c98b;color:#8a4b00}
+  .blkstack.sub{border-left:2px dashed #cfd6e4;padding-left:6px;margin-top:2px}
+  .blk.over,.blkstack.over{outline:2px dashed #0072de;outline-offset:2px}
+  .blkstack.over{background:#f2f8ff;border-radius:8px}
+</style>
+</head>
+<body>
+<div id="boot" class="boot" role="status" aria-live="polite">
+  <div class="bootbox">
+    <div class="bootlogo"><b class="gb">GNBD</b> MINI&middot;radio</div>
+    <div class="bootsub">EXTENDED Editor</div>
+    <div class="bootver">v0.2.0 beta</div>
+    <div class="bootbar"><i></i></div>
+    <div class="bootmsg">에디터를 불러오는 중...</div>
+  </div>
+</div>
+
+<header class="top">
+  <div class="brand"><b>GNBD</b> MINI&middot;radio <b>EXTENDED Editor</b> <span class="tag">v0.2.0 beta</span></div>
+  <input id="projName" class="pname" value="my-app" title="앱/테마 이름">
+  <span id="dirtyDot" class="dirtydot" title="저장 안 됨">●</span>
+  <label class="chk"><input type="checkbox" id="previewChk"> <span>미리보기</span></label>
+  <label class="chk"><input type="checkbox" id="gridChk" checked> <span>스냅</span></label>
+  <select id="gridSize" class="sel" title="스냅 간격">
+    <option value="1" selected>1px</option><option value="2">2px</option>
+    <option value="4">4px</option><option value="8">8px</option>
+    <option value="10">10px</option>
+  </select>
+  <span class="sp"></span>
+  <button id="btnUndo" class="btn">실행취소</button>
+  <button id="btnRedo" class="btn">다시 실행</button>
+  <button id="btnNew" class="btn">새로 만들기</button>
+  <button id="btnImport" class="btn">가져오기</button>
+  <button id="btnExport" class="btn">프로젝트 저장</button>
+  <input type="file" id="fileIn" accept=".json,.mrpack,.exlu" hidden>
+  <button id="btnRadioSave" hidden></button>
+  <button id="btnRadioManage" hidden></button>
+  <button id="langBtn" hidden></button>
+  <span id="radioStatus" class="rstatus"></span>
+</header>
+
+<div class="tabs">
+  <button id="tabLayout" class="on">레이아웃</button>
+  <button id="tabApp">앱 정보 / Lua</button>
+</div>
+
+<main class="wrap" id="viewLayout">
+  <aside class="palette" id="palette">
+    <div class="psearch"><input id="search" placeholder="모듈 검색..."></div>
+    <div id="paletteBody"></div>
+  </aside>
+
+  <section class="stage" id="stage">
+    <div class="stageui" id="stageUI">
+      <div class="aligntools">
+        <span class="lb">정렬</span>
+        <button class="tb" data-align="left">L</button>
+        <button class="tb" data-align="hcenter">C</button>
+        <button class="tb" data-align="right">R</button>
+        <span class="sp2"></span>
+        <button class="tb" data-align="top">T</button>
+        <button class="tb" data-align="vcenter">M</button>
+        <button class="tb" data-align="bottom">B</button>
+        <span class="sp2"></span>
+        <button class="tb" data-align="width">W=</button>
+        <button class="tb" data-align="height">H=</button>
+        <span class="sp2"></span>
+        <button class="tb" data-align="disth">&#8681;</button>
+        <button class="tb" data-align="distv">&#8680;</button>
+        <span class="sp2"></span>
+        <span class="lb">레이아웃</span>
+        <button class="tb pmode on" data-pmode="0">FM</button>
+        <button class="tb pmode" data-pmode="1">AM</button>
+        <button class="tb pmode" data-pmode="2">SSB</button>
+        <span class="sp2"></span>
+        <span class="lb">확대</span>
+        <input id="zoomRange" class="rng" type="range" min="50" max="200" step="10" value="100">
+        <span id="zoomVal" class="zoomval">100%</span>
+        <select id="zoomAnchor" class="sel">
+          <option value="center">중앙</option>
+          <option value="topleft">좌상단</option>
+        </select>
+        <span class="sp2"></span>
+        <span class="lb" id="selInfo">0 selected</span>
+      </div>
+      <div class="canvasBox">
+        <canvas id="screen" width="640" height="340"></canvas>
+        <div class="hintbar" id="hud">FM/AM/SSB는 각각 별도 레이아웃 · 드래그로 배치 · Delete 삭제</div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="props" id="props">
+    <div class="ptitle">레이어</div>
+    <div id="layersBody" class="layers"></div>
+    <div class="ptitle">색상</div>
+    <div id="colorsBody" class="colors"></div>
+    <div class="ptitle">속성</div>
+    <div id="propsBody" class="pbody"></div>
+  </aside>
+
+  <div id="tip" class="tip" hidden>
+    <canvas id="tipCanvas" width="640" height="340"></canvas>
+    <div class="tt"><b id="tipName"></b><span id="tipSub"></span><span id="tipColors" class="tc"></span></div>
+  </div>
+</main>
+
+<div class="panel" id="viewApp">
+  <section class="pcard">
+    <h3>레이아웃 미리보기</h3>
+    <canvas id="previewCanvas" width="640" height="340"
+      style="width:100%;max-width:320px;border:1px solid #e4e7ec;border-radius:8px;background:#080c10;image-rendering:pixelated"></canvas>
+    <div class="phint">레이아웃 탭에서 배치한 결과입니다. 이 화면을 기준으로 스크립트/블록을 작성하세요.</div>
+  </section>
+
+  <section class="pcard">
+    <h3>앱 정보</h3>
+    <label>종류</label>
+    <select id="exKind">
+      <option value="app">확장 앱 (app)</option>
+      <option value="theme">라디오 테마 (theme)</option>
+    </select>
+    <label>형태</label>
+    <select id="exType">
+      <option value="layout">레이아웃 + Lua</option>
+      <option value="script">Lua 단독 (즉시 실행 액션)</option>
+    </select>
+    <label>앱 이름 (메뉴 표시)</label>
+    <input id="exName" maxlength="31" placeholder="My App">
+    <label>작성자</label>
+    <input id="exAuthor" maxlength="31" placeholder="your name">
+    <label>ID (파일명)</label>
+    <input id="exId" maxlength="31" placeholder="my-app">
+    <div class="phint">ID를 비우면 이름에서 자동 생성됩니다. 기기 메뉴에는 영문/숫자만 표시됩니다(한글은 _ 로 표시).</div>
+    <div class="prow">
+      <button class="pbtn primary" id="btnExluSave">기기에 저장</button>
+      <button class="pbtn" id="btnExluDownload">PC로 내려받기</button>
+    </div>
+    <div id="msgInfo" class="pmsg"></div>
+  </section>
+
+  <section class="pcard">
+    <h3>블록 (에셋별 동작)</h3>
+    <div class="prow">
+      <select id="blkWidget" style="flex:2"></select>
+      <select id="blkEvent" style="flex:1">
+        <option value="click">클릭</option>
+        <option value="rotate">회전</option>
+        <option value="long">길게</option>
+        <option value="tick">틱</option>
+      </select>
+    </div>
+    <div id="blkPalette" class="blkpalette"></div>
+    <div id="blkStack" class="blkstack"></div>
+    <div class="prow">
+      <button class="pbtn primary" id="blkApply">스크립트에 반영</button>
+    </div>
+    <div id="blkMsg" class="pmsg"></div>
+    <h3 style="margin-top:12px">생성된 Lua</h3>
+    <textarea id="blkCode" class="script" readonly style="min-height:140px"></textarea>
+  </section>
+
+  <section class="pcard">
+    <h3>Lua 스크립트</h3>
+    <textarea id="exScript" class="script" placeholder="-- 예) function on_tick(ms) ... end"></textarea>
+    <div class="phint">테마는 Lua를 가질 수 없습니다(기본 라디오 보호). 저장 시 검증 실패 원인이 그대로 표시됩니다.</div>
+    <div id="msgScript" class="pmsg"></div>
+  </section>
+
+  <section class="pcard">
+    <h3>기기에 있는 EXLU</h3>
+    <div class="prow">
+      <button class="pbtn" id="btnExluRefresh">새로고침</button>
+      <button class="pbtn" id="btnExluApply">적용</button>
+    </div>
+    <ul id="exList" class="plist"></ul>
+    <div id="msgList" class="pmsg"></div>
+  </section>
+</div>
+
+<script src="../js/i18n.js?v=5"></script>
+<script src="../js/core/schema.js?v=5"></script>
+<script src="../js/core/project.js?v=5"></script>
+<script src="../js/core/validate.js?v=5"></script>
+<script src="../js/core/layout_c.js?v=5"></script>
+<script src="../js/core/runtime.js?v=5"></script>
+<script src="../js/catalog.js?v=5"></script>
+<script src="../js/render.js?v=5"></script>
+<script src="../js/editor.js?v=5"></script>
+<script src="../js/properties.js?v=5"></script>
+<script src="../js/palette.js?v=5"></script>
+<script src="../js/layers.js?v=5"></script>
+<script src="../js/recent_colors.js?v=5"></script>
+<script src="../js/colors.js?v=5"></script>
+<script src="../js/export.js?v=5"></script>
+<script src="../js/radio.js?v=5"></script>
+<script src="../js/modal.js?v=5"></script>
+<script src="js/extended.js?v=5"></script>
+<script src="../js/app.js?v=5"></script>
+<script src="js/blocks.js?v=5"></script>
+</body>
+</html>

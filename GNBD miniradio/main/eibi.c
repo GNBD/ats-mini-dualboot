@@ -742,11 +742,7 @@ void eibi_refresh(void)
     s_ui.station = s_station[0] ? s_station : NULL;
 
     if (s_hmi == HMI_TUNE) {
-        if (s_ui.ui_mode != UI_MODE_EASY) {
-            ui_draw_all(&s_ui);
-        } else {
-            ui_draw_rds(&s_ui);
-        }
+        ui_draw_all(&s_ui);
     }
 }
 

@@ -191,6 +191,21 @@ esp_err_t si4732_set_gpo1(si4732_t *dev, bool level);
 /** @brief FM 소프트 뮤트 최대 감쇠 (0–63 dB, 0=비활성) */
 esp_err_t si4732_set_fm_soft_mute(si4732_t *dev, uint8_t atten_db);
 
+/**
+ * @brief FM RF AGC 정지 + LNA 이득 고정 (AN332 Command 0x28 FM_AGC_OVERRIDE)
+ *
+ * @param dev            드라이버
+ * @param rf_agc_disable true = RF AGC 정지하고 이득 고정,
+ *                       false = AGC 자동 복귀
+ * @param lna_gain_index AGC 정지 시 이득 인덱스 (0 = 최소 감쇠/최대 이득,
+ *                       1–25 = 중간, 26 = 최대 감쇠/최소 이득)
+ *
+ * rf_agc_disable = false일 때는 lna_gain_index가 무시된다.
+ * FM 전용이며 AM/SSB에서는 사용할 수 없다 (ERR 응답).
+ */
+esp_err_t si4732_fm_agc_override(si4732_t *dev, bool rf_agc_disable,
+                                 uint8_t lna_gain_index);
+
 /** @brief AM/SSB 소프트 뮤트 최대 감쇠 (0–63 dB, 0=비활성) */
 esp_err_t si4732_set_am_soft_mute(si4732_t *dev, uint8_t atten_db);
 

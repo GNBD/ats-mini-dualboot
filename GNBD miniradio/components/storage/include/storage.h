@@ -78,6 +78,14 @@ typedef struct {
     preset_entry_t slot[STORAGE_ATS_SLOTS];
 } ats_bank_t;
 
+/* 즐겨찾기 표시 이름 (별도 NVS 키 → 프리셋 blob 구조는 그대로 유지) */
+#define STORAGE_MAGIC_NAMES 0x4D524E31  /* 'MRN1' */
+#define STORAGE_NAME_LEN    16
+typedef struct {
+    uint32_t magic;
+    char     name[STORAGE_PRESET_SLOTS][STORAGE_NAME_LEN];
+} storage_names_t;
+
 /* 확장 수신 설정 (별도 NVS 키) */
 #define STORAGE_MAGIC_EXT 0x4D525832  /* 'MRX2' */
 
@@ -155,6 +163,12 @@ esp_err_t storage_load_ats(ats_bank_t *out);
 /** @brief ATS 결과 뱅크 저장 */
 esp_err_t storage_save_ats(const ats_bank_t *bank);
 
+/** @brief 즐겨찾기 이름 로드 (없으면 전부 빈 문자열) */
+esp_err_t storage_load_names(storage_names_t *out);
+
+/** @brief 즐겨찾기 이름 저장 */
+esp_err_t storage_save_names(const storage_names_t *names);
+
 /** @brief 확장 설정 기본값 */
 void storage_ext_defaults(storage_ext_t *out);
 
@@ -180,6 +194,10 @@ esp_err_t storage_load_batt_cal(int16_t *offset_mv);
 esp_err_t storage_save_batt_cal(int16_t offset_mv);
 esp_err_t storage_load_setup_done(bool *done);
 esp_err_t storage_save_setup_done(bool done);
+
+/** @brief FM RF LNA 이득 로드/저장 (0=AUTO, 1..27 = LNA 인덱스+1) */
+esp_err_t storage_load_rf_gain(uint8_t *out);
+esp_err_t storage_save_rf_gain(uint8_t value);
 
 /** @brief 날씨 지역 문자열 로드 */
 esp_err_t storage_load_weather_location(char *out, size_t n);

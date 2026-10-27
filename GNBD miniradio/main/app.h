@@ -36,10 +36,11 @@ extern "C" {
 #define SAVE_DELAY         2000
 #define SEEK_TIMEOUT       600000
 #define RSQ_PERIOD         250
-#define RDS_PERIOD         500
+#define RDS_PERIOD         100
 #define BATT_PERIOD        500
 #define TUNE_COALESCE_MS   15
 #define BFO_MAX_HZ         5000
+#define UI_THEME_CUSTOM    6
 
 enum {
     RM_BACK = 0,
@@ -50,7 +51,10 @@ enum {
     /* 프리셋 / RDS */
     RM_FAV, RM_RDS, RM_STEREO, RM_DEEMPH,
     /* 오디오 */
-    RM_VOLUME, RM_AGC, RM_AVC, RM_SOFTMUTE, RM_SQUELCH,
+    RM_VOLUME, RM_AGC, RM_RFGAIN, RM_AVC, RM_SOFTMUTE, RM_SQUELCH,
+    /* 모드 슬롯 (NEWPROJECT 규칙이 연결되는 UI 요소) */
+    RM_MOD_A, RM_MOD_B, RM_MOD_C, RM_MOD_D,
+    RM_MOD_E, RM_MOD_F, RM_MOD_G, RM_MOD_H,
     RM_SETTINGS, RM_COUNT
 };
 
@@ -66,14 +70,14 @@ enum {
     ST_BATT, ST_BATT_CAL, ST_CPU, ST_WIFI,
     /* 데이터 */
     ST_EIBI, ST_QUICKSET,
+    /* 진단 (비영구) */
+    ST_SIGDBG,
+    /* 표시 */
+    ST_SIGVIEW,
+    /* 모드 슬롯 (NEWPROJECT 규칙이 연결되는 UI 요소) */
+    ST_MOD_A, ST_MOD_B, ST_MOD_C, ST_MOD_D,
+    ST_MOD_E, ST_MOD_F, ST_MOD_G, ST_MOD_H,
     ST_ABOUT, ST_COUNT
-};
-
-/* 화면 레이아웃 모드 */
-enum {
-    UI_MODE_EASY = 0,
-    UI_MODE_STANDARD,
-    UI_MODE_COUNT
 };
 
 #define FM_STEP_COUNT   2
@@ -112,6 +116,7 @@ typedef enum {
     WEB_CMD_PRESET_TUNE,
     WEB_CMD_PRESET_SAVE,
     WEB_CMD_PRESET_DEL,
+    WEB_CMD_PRESET_ADD,
     WEB_CMD_WIFI_OFF,
     WEB_CMD_WIFI_AP,
     WEB_CMD_WIFI_STA,
@@ -121,6 +126,8 @@ typedef enum {
     WEB_CMD_TIME,
     WEB_CMD_FOLLOW,
     WEB_CMD_SETUP_FINISH,
+    WEB_CMD_UI_EVENT,
+    WEB_CMD_UI_RELOAD,
 } web_cmd_type_t;
 
 typedef struct {
@@ -139,6 +146,7 @@ extern bool               s_ssb_prepared;
 extern ui_state_t         s_ui;
 extern storage_settings_t s_cfg;
 extern preset_bank_t      s_presets;
+extern storage_names_t    s_pnames;
 extern rds_info_t         s_rds;
 extern battery_state_t    s_batt;
 
@@ -158,6 +166,7 @@ extern bool     s_sleep_armed;
 
 extern storage_ext_t s_ext;
 extern bool     s_agc_on;
+extern uint8_t  s_rfgain;   /* FM RF 이득: 0=AUTO, 1..27 = LNA 인덱스+1 */
 extern uint8_t  s_softmute;
 extern uint8_t  s_avc;
 extern bool     s_squelch_on;
@@ -232,7 +241,6 @@ extern bool     s_clock_set;
 extern int16_t  s_utc_min;
 extern bool     s_follow_browser;
 extern bool     s_sntp_started;
-extern uint8_t  s_ui_mode;
 extern bool     s_setup_done;
 extern bool     s_digit_mode;
 extern int      s_digit_place;
@@ -261,6 +269,8 @@ extern bool     s_eibi_yes;
 extern storage_splash_t s_splash;
 extern int      s_splash_cursor;
 extern uint16_t s_quick_mask;
+extern uint8_t  s_dbg_sig;   /* signal speed: 0=LOW(250ms), 1=HIGH(30ms) */
+extern uint8_t  s_sig_view;  /* SIG 칸 표시: 0=그래프,1=바,2=프리셋,3=RDS,4=상태 */
 extern int      s_qcfg_cur;
 extern int      s_qcfg_top;
 extern const char *const QA_LABELS[QA_COUNT];
@@ -351,6 +361,7 @@ void toast_redraw(void);
 esp_err_t radio_set_volume(void);
 int mode_dsp_slot(radio_mode_t m);
 void dsp_apply(void);
+void rfgain_apply(void);
 esp_err_t cpu_apply(int mhz);
 void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data);
 void sntp_start(void);
@@ -374,7 +385,8 @@ esp_err_t http_wifi_handler(httpd_req_t *req);
 esp_err_t http_settings_handler(httpd_req_t *req);
 void http_start(void);
 void http_stop(void);
-void wifi_off(void);
+bool web_authorized(httpd_req_t *req);
+esp_err_t web_require_auth(httpd_req_t *req);void wifi_off(void);
 void wifi_update_tx_power(void);
 esp_err_t wifi_boot(wifi_mode_t mode);
 esp_err_t wifi_start_now(void);
@@ -415,6 +427,9 @@ int16_t radio_bfo_value(void);
 esp_err_t bw_apply(void);
 int preset_index_for_freq(uint32_t freq, int band);
 int ats_index_for_freq(uint32_t freq, int band);
+const char *preset_name_at(int idx);
+/* 현재 밴드의 프리셋 + ATS 주파수 목록 (밴드맵 눈금용) */
+int band_marks(int band, uint32_t *out, int max);
 void fmt_freq_short(uint32_t hz, int mode, char *buf, size_t n);
 void rmenu_build(void);
 void settings_build(void);

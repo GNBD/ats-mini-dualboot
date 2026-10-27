@@ -82,6 +82,10 @@ esp_err_t display_fill_screen(uint16_t color_rgb565);
 esp_err_t display_fill_rect(int16_t x, int16_t y, uint16_t w, uint16_t h,
                             uint16_t color_rgb565);
 
+/** @brief RGB565 버퍼를 그대로 블릿 (부팅 이미지 등) */
+esp_err_t display_draw_rgb565(int16_t x, int16_t y, uint16_t w, uint16_t h,
+                              const uint16_t *data);
+
 /** @brief QR 코드를 지정한 배율/색상으로 그립니다. */
 esp_err_t display_draw_qr(const char *text, int16_t x, int16_t y,
                           uint8_t scale, uint16_t fg_rgb565,
@@ -122,10 +126,15 @@ uint16_t display_text_width(const char *text, display_font_t font);
 uint16_t display_draw_text_scaled(int16_t x, int16_t y, const char *text,
                                   display_font_t font, uint16_t fg, uint16_t bg,
                                   display_datum_t datum, uint8_t scale);
+uint16_t display_draw_text_pct(int16_t x, int16_t y, const char *text,
+                               display_font_t font, uint16_t fg, uint16_t bg,
+                               display_datum_t datum, uint16_t pct);
 
 /** @brief 배율을 적용한 텍스트 폭(px) */
 uint16_t display_text_width_scaled(const char *text, display_font_t font,
                                    uint8_t scale);
+uint16_t display_text_width_pct(const char *text, display_font_t font,
+                                uint16_t pct);
 
 /** @brief 폰트 높이(px) */
 uint16_t display_font_height(display_font_t font);

@@ -1,0 +1,9 @@
+releasev1/
+docs/
+components/lovyan_gfx/
+managed_components/
+build/
+*.txt
+*.bin
+sdkconfig.old
+components/si4732/ssb_patch_user.c

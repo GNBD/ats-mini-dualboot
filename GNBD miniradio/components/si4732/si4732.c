@@ -648,6 +648,23 @@ esp_err_t si4732_set_fm_soft_mute(si4732_t *dev, uint8_t atten_db)
                                atten_db);
 }
 
+esp_err_t si4732_fm_agc_override(si4732_t *dev, bool rf_agc_disable,
+                                 uint8_t lna_gain_index)
+{
+    /* AN332 Command 0x28 FM_AGC_OVERRIDE:
+       ARG1 bit0 RFAGCDIS (1 = RF AGC 정지),
+       ARG2 bits4:0 LNA_GAIN_INDEX
+       (0 = 최소 감쇠/최대 이득, 26 = 최대 감쇠/최소 이득) */
+    if (lna_gain_index > 26u) {
+        lna_gain_index = 26u;
+    }
+    uint8_t args[2] = {
+        (uint8_t)(rf_agc_disable ? 0x01 : 0x00),
+        (uint8_t)(rf_agc_disable ? (lna_gain_index & 0x1Fu) : 0x00),
+    };
+    return si4732_command(dev, SI4732_CMD_FM_AGC_OVERRIDE, args, sizeof(args));
+}
+
 esp_err_t si4732_set_am_soft_mute(si4732_t *dev, uint8_t atten_db)
 {
     if (atten_db > 63) {

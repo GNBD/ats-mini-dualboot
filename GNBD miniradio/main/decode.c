@@ -401,6 +401,19 @@ bool decode_poll(uint32_t now)
     return s_changed;
 }
 
+void decode_set_gpio(int pin)
+{
+    if (pin < 0 || pin > 48) {
+        return;
+    }
+    s_gpio = pin;
+}
+
+void decode_set_mode(int idx)
+{
+    s_mode = (idx == 1) ? DECODE_MODE_RTTY : DECODE_MODE_CW;
+}
+
 void decode_cycle_mode(void)
 {
     s_mode = (s_mode == DECODE_MODE_CW) ? DECODE_MODE_RTTY
