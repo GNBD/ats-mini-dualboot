@@ -730,7 +730,12 @@ void app_main(void)
                     ui_draw_all(&s_ui);
                 } else if (s_hmi == HMI_MENU || s_hmi == HMI_SET ||
                            s_hmi == HMI_FAV || s_hmi == HMI_ATS_LIST) {
-                    ui_draw_radio_panel(&s_ui);
+                    /* 커스텀 UI 는 패널 재그림 시 화면 전체를 다시 그리므로
+                       EIBI 갱신마다 깜빡임 -> 커스텀 모드에서는 redraw 하지 않고
+                       값만 저장(메뉴 종료 후 라디오로 돌아올 때 반영) */
+                    if (!ui_custom_active()) {
+                        ui_draw_radio_panel(&s_ui);
+                    }
                 }
             }
         }

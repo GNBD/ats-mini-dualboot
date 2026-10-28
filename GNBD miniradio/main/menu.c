@@ -122,6 +122,10 @@ void rmenu_build(void)
         if (!g_menu_items[i].visible) {
             continue;
         }
+        /* ATS는 FM 전용 */
+        if (g_menu_items[i].id == RM_ATS && s_ui.mode != RADIO_MODE_FM) {
+            continue;
+        }
         labels[n] = g_menu_items[i].label;
         s_menu_ids[n] = g_menu_items[i].id;
         ++n;
@@ -220,6 +224,10 @@ void settings_build(void)
     int n = 0;
     for (int i = 0; i < g_set_count && n < ST_COUNT; ++i) {
         if (!g_set_items[i].visible) {
+            continue;
+        }
+        /* 배터리 캘리브레이션은 일반 사용자에게 숨김 */
+        if (g_set_items[i].id == ST_BATT_CAL) {
             continue;
         }
         labels[n] = g_set_items[i].label;
@@ -800,11 +808,13 @@ void opt_apply(int page, int item, int idx)
             if (s_radio_ok && s_ui.mode == RADIO_MODE_FM) {
                 si4732_set_deemphasis(&s_radio, s_deemph_75);
             }
+            s_freq_dirty = true;
             mark_change();
             break;
         case RM_AGC:
             s_agc_on = (idx == 0);
             dsp_apply();
+            s_freq_dirty = true;
             mark_change();
             break;
         case RM_RFGAIN:
@@ -815,11 +825,13 @@ void opt_apply(int page, int item, int idx)
         case RM_AVC:
             s_avc = (uint8_t)((idx < 0) ? 0 : (idx > 90 ? 90 : idx));
             dsp_apply();
+            s_freq_dirty = true;
             mark_change();
             break;
         case RM_SOFTMUTE:
             s_softmute = (uint8_t)((idx < 0) ? 0 : (idx > 63 ? 63 : idx));
             dsp_apply();
+            s_freq_dirty = true;
             mark_change();
             break;
         case RM_SQUELCH: {
@@ -835,6 +847,7 @@ void opt_apply(int page, int item, int idx)
             if (s_radio_ok) {
                 si4732_set_mute(&s_radio, false);
             }
+            s_freq_dirty = true;
             mark_change();
             break;
         }
@@ -844,6 +857,7 @@ void opt_apply(int page, int item, int idx)
                 if (s_radio_ok) {
                     si4732_set_bfo(&s_radio, radio_bfo_value());
                 }
+                s_freq_dirty = true;
                 mark_change();
             }
             break;
@@ -1081,9 +1095,15 @@ int quick_build(uint8_t *out)
 {
     int n = 0;
     for (int i = 0; i < QA_COUNT && n < QUICK_MAX; ++i) {
-        if (s_quick_mask & (1u << i)) {
-            out[n++] = (uint8_t)i;
+        if (!(s_quick_mask & (1u << i))) {
+            continue;
         }
+        /* ATS는 FM 전용 */
+        if ((i == QA_ATS_LIST || i == QA_ATS_RUN) &&
+            s_ui.mode != RADIO_MODE_FM) {
+            continue;
+        }
+        out[n++] = (uint8_t)i;
     }
     return n;
 }

@@ -27,7 +27,7 @@ static int s_hist_n;
 static int s_hist_pos;
 static uint32_t s_eibi_freq;
 static int64_t  s_eibi_utc_min = -1;
-static char     s_eibi_name[96];
+static char     s_eibi_name[160];
 
 
 
@@ -166,7 +166,7 @@ void ui_draw_adv_signal4(const ui_state_t *s)
     if (ix < 260) {
         int iw = 312 - ix;
         display_fill_rect((int16_t)ix, 36, (uint16_t)iw, 38, UI_BG);
-        char ib[72];
+        char ib[160];
         if (s->mode == RADIO_MODE_FM) {
             if (s->rds && s->rds->ps_valid) {
                 fit_text(ib, sizeof(ib), s->rds->ps, DISPLAY_FONT_SMALL, iw);

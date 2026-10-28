@@ -55,6 +55,7 @@ int16_t radio_bfo_value(void)
 
 static uint32_t s_seek_started;
 static uint32_t s_ats_timeout_ms;
+static uint32_t s_ats_draw_ms;
 
 #define SEEK_RSSI_MIN 4
 #define SEEK_SNR_MIN  1
@@ -491,7 +492,9 @@ void seek_poll(uint32_t now)
     bool stc = false;
     bool valid = false;
     bool bltf = false;
-    esp_err_t err = si4732_tune_status(&s_radio, true, false,
+    /* 주파수 표시를 실시간으로 따라가게 하려면 시크 중에는 INTACK 없이
+     * TUNE_STATUS를 읽는다(INTACK=1은 완료 인터럽트를 매번 지운다). */
+    esp_err_t err = si4732_tune_status(&s_radio, false, false,
                                        &freq, &stc, &valid, &bltf);
     if (err != ESP_OK) {
         if ((int32_t)(now - s_seek_log_ms) >= 0) {
@@ -525,6 +528,17 @@ void seek_poll(uint32_t now)
     }
     if (!done) {
         return;
+    }
+    if (stc) {
+        /* 완료 인터럽트 정리 + 최종 주파수 재확인 */
+        uint32_t f2 = 0;
+        bool stc2 = false, valid2 = false, bltf2 = false;
+        if (si4732_tune_status(&s_radio, true, false,
+                               &f2, &stc2, &valid2, &bltf2) == ESP_OK) {
+            if (f2) { freq = f2; }
+            valid = valid2;
+            bltf = bltf2;
+        }
     }
     if (valid && freq) {
         s_ui.freq_hz = freq;
@@ -593,8 +607,8 @@ void ats_finish(const char *msg)
 
 void ats_start(void)
 {
-    if (!s_radio_ok || band_is_ssb(s_ui.mode)) {
-        toast("ATS: FM/AM ONLY");
+    if (!s_radio_ok || s_ui.mode != RADIO_MODE_FM) {
+        toast("ATS: FM ONLY");
         return;
     }
     const band_desc_t *b = &band_table[s_ui.band_idx];
@@ -602,6 +616,7 @@ void ats_start(void)
     s_ats_found = 0;
     s_ats_last_freq = 0;
     s_ats_hold = false;
+    s_ats_draw_ms = 0;
     memset(&s_ats_list, 0, sizeof(s_ats_list));
     s_ats = ATS_SEEK;
     s_ats_ms = now_ms();
@@ -657,7 +672,13 @@ void ats_poll(uint32_t now)
             esp_err_t e = (s_ui.mode == RADIO_MODE_FM)
                           ? si4732_fm_rsq(&s_radio, &r)
                           : si4732_am_rsq(&s_radio, &r);
-            good = (e == ESP_OK && r.valid && r.rssi >= SEEK_RSSI_MIN && r.snr >= SEEK_SNR_MIN);
+            if (s_ui.mode == RADIO_MODE_FM) {
+                good = (e == ESP_OK && r.valid &&
+                        r.rssi >= SEEK_RSSI_MIN && r.snr >= SEEK_SNR_MIN);
+            } else {
+                good = (e == ESP_OK && r.valid &&
+                        r.rssi >= SEEK_AM_RSSI_MIN);
+            }
             if (e == ESP_OK) {
                 scan_rsq_show(&r, !good);
             }
@@ -700,6 +721,11 @@ void ats_poll(uint32_t now)
         return;
     }
     s_ats_wait = now + 60;
+    /* 스캔 중에도 주파수 숫자가 따라가도록 주기적으로 갱신 */
+    if ((int32_t)(now - s_ats_draw_ms) >= 0) {
+        s_ats_draw_ms = now + 150;
+        ui_draw_radio_freq(&s_ui);
+    }
 }
 
 /* ------------------------------------------------------------- 메뉴 */

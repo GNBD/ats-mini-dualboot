@@ -188,6 +188,15 @@ static int num_bind(uint8_t b, const ui_state_t *s)
     case UC_B_SNR:  return s->have_rsq ? s->rsq.snr : 0;
     case UC_B_BATT: return s->have_battery ? s->battery.percent : 0;
     case UC_B_VOL:  return s->volume;
+    case UC_B_SQ: {
+        if (!s_squelch_on) {
+            return 0;
+        }
+        int sq = (s->mode == RADIO_MODE_FM) ? 0
+               : (s->mode == RADIO_MODE_AM) ? 1
+               : (s->mode == RADIO_MODE_LSB) ? 2 : 3;
+        return s_squelch_thr[sq];
+    }
     default:        return 0;
     }
 }
@@ -248,8 +257,7 @@ static const char *str_bind(uint8_t b, const ui_state_t *s, char *buf, size_t n)
         snprintf(buf, n, "%u", (unsigned)s_avc);
         return buf;
     case UC_B_SQ: {
-        int sq = s->mode == RADIO_MODE_FM ? 0
-               : (s->mode == RADIO_MODE_AM ? 1 : 2);
+        int sq = mode_dsp_slot(s->mode);
         if (!s_squelch_on) { return "OFF"; }
         snprintf(buf, n, "%s%u", s_squelch_type[sq] ? "S" : "R",
                  (unsigned)s_squelch_thr[sq]);
@@ -257,17 +265,27 @@ static const char *str_bind(uint8_t b, const ui_state_t *s, char *buf, size_t n)
     }
     case UC_B_STEREO: return s->stereo ? "ST" : "";
     case UC_B_LINE1:
-        snprintf(buf, n, "BW %s  ST %luK", bw_label(),
+        snprintf(buf, n, "BW %s ST %luK", bw_label(),
                  (unsigned long)(eff_step_hz() / 1000));
         return buf;
     case UC_B_LINE2:
-        snprintf(buf, n, "BFO %+ld  AGC %s  SM %u", (long)s_bfo,
+        snprintf(buf, n, "BFO %+ld AGC %s SM %u", (long)s_bfo,
                  s_agc_on ? "ON" : "OFF", (unsigned)s_softmute);
         return buf;
-    case UC_B_LINE3:
-        snprintf(buf, n, "AFC OK  AVC %u  SQ %s", (unsigned)s_avc,
-                 s_squelch_on ? "ON" : "OFF");
+    case UC_B_LINE3: {
+        const char *afc = !s->have_rsq ? "--" : (s->rsq.afc_rail ? "RA" : "OK");
+        int sq = mode_dsp_slot(s->mode);
+        char sqv[8];
+        if (s_squelch_on) {
+            snprintf(sqv, sizeof(sqv), "%s%u",
+                     s_squelch_type[sq] ? "S" : "R", s_squelch_thr[sq]);
+        } else {
+            snprintf(sqv, sizeof(sqv), "OFF");
+        }
+        /* 위젯 폭(약 122px)에 맞춰 공백을 한 칸으로 압축 */
+        snprintf(buf, n, "AFC %s AVC %u SQ %s", afc, (unsigned)s_avc, sqv);
         return buf;
+    }
     case UC_B_WIFI:
         return s->wifi_state == 1 ? "AP"
              : s->wifi_state == 2 ? "STA"
@@ -286,6 +304,21 @@ static const char *str_bind(uint8_t b, const ui_state_t *s, char *buf, size_t n)
         return buf;
     case UC_B_EIBI:
         return (s->station && s->station[0]) ? s->station : "";
+    case UC_B_TOAST:
+        return s_toast[0] ? s_toast : "";
+    case UC_B_SLEEP:
+        if (!s_sleep_armed || s_sleep_min == 0) {
+            return "";
+        }
+        {
+            int32_t remain = (int32_t)(s_sleep_deadline - now_ms());
+            if (remain < 0) {
+                remain = 0;
+            }
+            int sec = (int)((remain + 999) / 1000);
+            snprintf(buf, n, "SLEEP %d:%02d", sec / 60, sec % 60);
+            return buf;
+        }
     default: return buf;
     }
 }
@@ -391,6 +424,25 @@ static void draw_rsq(const uc_widget_t *w, const ui_state_t *s)
                           DISPLAY_DATUM_TR, pct);
 }
 
+/* EiBi 이름의 과도한 공백을 하나로 축약 */
+static void compact_spaces(char *dst, size_t n, const char *src)
+{
+    size_t o = 0;
+    bool sp = false;
+    for (const char *p = src; p && *p && o + 1 < n; ++p) {
+        if (*p == ' ' || *p == '\t') {
+            sp = true;
+            continue;
+        }
+        if (sp && o > 0) {
+            dst[o++] = ' ';
+        }
+        sp = false;
+        dst[o++] = *p;
+    }
+    dst[o] = '\0';
+}
+
 static void draw_rds(const uc_widget_t *w, const ui_state_t *s)
 {
     display_fill_rect((int16_t)w->x, (int16_t)w->y, (uint16_t)w->w,
@@ -398,8 +450,10 @@ static void draw_rds(const uc_widget_t *w, const ui_state_t *s)
     display_draw_rect((int16_t)w->x, (int16_t)w->y, (uint16_t)w->w,
                       (uint16_t)w->h, UI_LINE);
 
+    int idx = w->uid ? (int)(w->uid % 8) : 0;
+
     if (s->mode != RADIO_MODE_FM) {
-        /* AM/SSB: EiBi 정보 카드 */
+        /* AM/SSB: EiBi 정보 카드 (uid 별 마퀴) */
         display_draw_text((int16_t)(w->x + 4), (int16_t)(w->y + 3), "EIBI",
                           DISPLAY_FONT_TINY, UI_GOLD, UI_PANEL,
                           DISPLAY_DATUM_TL);
@@ -407,11 +461,31 @@ static void draw_rds(const uc_widget_t *w, const ui_state_t *s)
                           s->clock, DISPLAY_FONT_TINY, UI_MUTED, UI_PANEL,
                           DISPLAY_DATUM_TR);
         const char *st = (s->station && s->station[0]) ? s->station : "NO DATA";
-        char eb[40];
-        fit(eb, sizeof(eb), st, DISPLAY_FONT_TINY, w->w - 8);
-        display_draw_text((int16_t)(w->x + 4), (int16_t)(w->y + 16), eb,
-                          DISPLAY_FONT_TINY, UI_FG, UI_PANEL,
-                          DISPLAY_DATUM_TL);
+        /* 매칭된 방송국을 한 줄에 이어 붙이면 폭에 걸려 2개만 보인다.
+         * 방송국별로 최대 3줄로 나눠 모두 표시한다. */
+        char lines = (char)((w->h - 16) / 10);
+        if (lines < 1) { lines = 1; }
+        if (lines > 3) { lines = 3; }
+        const char *p = st;
+        for (int i = 0; i < lines && *p; ++i) {
+            while (*p == ' ') { ++p; }
+            if (!*p) { break; }
+            const char *sep = strstr(p, " / ");
+            size_t len = sep ? (size_t)(sep - p) : strlen(p);
+            char one[64];
+            if (len >= sizeof(one)) { len = sizeof(one) - 1; }
+            memcpy(one, p, len);
+            one[len] = '\0';
+            char cb[64];
+            compact_spaces(cb, sizeof(cb), one);
+            char eb[40];
+            fit(eb, sizeof(eb), cb, DISPLAY_FONT_TINY, w->w - 8);
+            display_draw_text((int16_t)(w->x + 4), (int16_t)(w->y + 16 + i * 10),
+                              eb, DISPLAY_FONT_TINY, UI_FG, UI_PANEL,
+                              DISPLAY_DATUM_TL);
+            if (!sep) { break; }
+            p = sep + 3;
+        }
         return;
     }
 
@@ -422,7 +496,31 @@ static void draw_rds(const uc_widget_t *w, const ui_state_t *s)
                           rds_pty_name(s->rds->pty), DISPLAY_FONT_TINY,
                           UI_MUTED, UI_PANEL, DISPLAY_DATUM_TR);
         const char *ps = (s->rds->ps_valid && s->rds->ps[0]) ? s->rds->ps : "--";
-        display_draw_text((int16_t)(w->x + 4), (int16_t)(w->y + 16), ps,
+        static int rds_off[8];
+        char pr[40];
+        size_t plen = strlen(ps);
+        if (plen > 3 && display_text_width(ps, DISPLAY_FONT_TINY) >
+            (uint16_t)(w->w - 8)) {
+            int off = rds_off[idx] % (int)plen;
+            char rot[128];
+            size_t n = plen;
+            if (n > sizeof(rot) - 1) {
+                n = sizeof(rot) - 1;
+            }
+            for (size_t i = 0; i < n; ++i) {
+                rot[i] = ps[(off + i) % plen];
+            }
+            rot[n] = '\0';
+            fit(pr, sizeof(pr), rot, DISPLAY_FONT_TINY, w->w - 8);
+            static int rds_skip[8];
+            if (++rds_skip[idx] >= 4) {
+                rds_skip[idx] = 0;
+                ++rds_off[idx];
+            }
+        } else {
+            fit(pr, sizeof(pr), ps, DISPLAY_FONT_TINY, w->w - 8);
+        }
+        display_draw_text((int16_t)(w->x + 4), (int16_t)(w->y + 16), pr,
                           DISPLAY_FONT_TINY, UI_FG, UI_PANEL,
                           DISPLAY_DATUM_TL);
         if (s->rds->rt_valid && s->rds->rt[0]) {
@@ -434,6 +532,7 @@ static void draw_rds(const uc_widget_t *w, const ui_state_t *s)
         }
     }
 }
+
 
 static void draw_sig(const uc_widget_t *w, const ui_state_t *s)
 {
