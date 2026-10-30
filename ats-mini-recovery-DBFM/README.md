@@ -2,6 +2,8 @@
 
 **v4.2.2 (DES)** · ESP32-S3 **N16R8** · SI4732 receiver
 
+### [One-click web flasher](https://gnbd.github.io/ats-mini-dualboot/install.html) · [원클릭 웹 플래셔](https://gnbd.github.io/ats-mini-dualboot/install.html)
+
 DBFM is a standalone boot manager for the ATS Mini (ESP32-S3 + SI4732). It runs
 from its own flash partition before the radio firmware, lets you choose between
 two application slots, and provides recovery, update, partition and storage
@@ -181,6 +183,8 @@ See `NOTICE`, `LICENSE`, and `LICENSES/`.
 ---
 
 ## 한국어
+
+### [원클릭 웹 플래셔](https://gnbd.github.io/ats-mini-dualboot/install.html)
 
 **DBFM(DualBoot Firmware Manager)** 은 ATS Mini(ESP32-S3 + SI4732)용
 **부트 매니저(리커버리)** 입니다. 전원을 켜면 app0/app1보다 먼저 실행되어
