@@ -2,6 +2,9 @@
 
 **v4.2.2 (DES)** · ESP32-S3 **N16R8** · SI4732 receiver
 
+<img width="320" height="170" alt="shot" src="https://github.com/user-attachments/assets/9f1d51cd-a125-4306-ba29-41f59d762d1d" />
+
+
 DBFM is a standalone boot manager for the ATS Mini (ESP32-S3 + SI4732). It runs
 from its own flash partition before the radio firmware, lets you choose between
 two application slots, and provides recovery, update, partition and storage
