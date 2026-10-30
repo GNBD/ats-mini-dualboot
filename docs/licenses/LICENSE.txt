@@ -44,9 +44,9 @@ Third-party components
 ----------------------
 
 Files and materials that carry a different copyright or license notice are not
-relicensed under this MIT License. In particular, Rotary.cpp and Rotary.h are
-Copyright 2011 Ben Buxton and licensed under GPL-3.0 (see
-LICENSES/GPL-3.0.txt). The Arduino-ESP32 core and the other libraries linked
+relicensed under this MIT License. In particular, encoder.cpp and encoder.h
+are Copyright (c) miniradio Contributors and licensed under MIT (see
+NOTICE section 1). The Arduino-ESP32 core and the other libraries linked
 into the firmware images are covered by their own terms (LGPL-2.1-or-later
 and others; see NOTICE and LICENSES/LGPL-2.1.txt). Other third-party
 components remain subject to their own license terms; see the NOTICE file and
@@ -58,14 +58,12 @@ Firmware binaries
 Firmware releases from this repository contain code under more than one
 license. Each part keeps its own terms:
 
-- The application images built from ats-mini-recovery-beta and
-  ats-mini-recovery-lite link Rotary.cpp and Rotary.h, which are GPL-3.0
-  (see the NOTICE file). Distributing such an image distributes GPL-3.0
-  covered code: keep the copyright notices and the license text, state
-  that the work was modified where the applicable license requires it, and
-  provide the corresponding source code (this repository at the matching
-  commit or tag).
-- The bootloader binaries are Apache-2.0, not MIT (see above).
+- The application image built from ats-mini-recovery-DBFM links the MIT
+  encoder, the LGPL-2.1-or-later Arduino-ESP32 core, and Apache-2.0 ESP-IDF
+  components. Keep the copyright notices and license texts, and provide the
+  source/build information needed to relink or replace the LGPL parts.
+  It contains no GPL-3.0 code.
+- The bootloader binary is Apache-2.0, not MIT (see above).
 - The Arduino-ESP32 core and the other libraries linked into the images
   keep their own license terms; see NOTICE sections 3, 4 and 5.
 

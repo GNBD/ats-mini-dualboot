@@ -255,7 +255,7 @@ static void handleRoot()
     ".sidefoot{display:none}.top h1{font-size:20px}}"
     "</style></head><body><div class='shell'>"
     "<aside class='side'>"
-    "<div class='brand'><div class='logo'>D</div><div><b>DBFM</b>"
+    "<div class='brand'><div><b>DBFM</b>"
     "<span>DualBoot Firmware Manager</span></div></div>"
     "<nav class='tabs'>"
     "<button class='tab on' data-tab='status'>Status</button>"
@@ -327,6 +327,14 @@ static void handleRoot()
     "<option value='1'>Upload &amp; flash to App1</option>"
     "</select>"
     "<button class='btn' id='ubtn' data-act='upload'>Upload</button></div>");
+  html += F("<div class='card' id='netcard' style='display:none'><h2>NET Update</h2>"
+    "<select id='nslot'>"
+    "<option value='0'>App0</option>"
+    "<option value='1'>App1</option>"
+    "</select>"
+    "<select id='nurl'><option value=''>Loading URLs...</option></select>"
+    "<button class='btn get' data-act='netupdate'>Download &amp; flash</button>"
+    "<div id='nmsg' class='muted sm' style='margin-top:8px'></div></div>");
   html += F("</div>");
 
   // ---- Files ----
@@ -489,12 +497,34 @@ static void handleRoot()
     "}).catch(function(){});},1000);})"
     ".catch(function(){$('wmsg').textContent='Connect request failed';});}"
 
+    // ---- NET update (card hidden for now) ----
+    "function loadNet(){fetch('/netlist').then(function(r){return r.json();}).then(function(a){"
+    "var s=$('nurl');if(!s)return;s.innerHTML='';if(!a.length){var o=document.createElement('option');"
+    "o.value='';o.textContent='No URLs configured';s.appendChild(o);return;}"
+    "a.forEach(function(u){var o=document.createElement('option');o.value=u;"
+    "var n=u.split('/');o.textContent=n[n.length-1]||u;s.appendChild(o);});"
+    "}).catch(function(){});}"
+    "function startNetFlash(slot,url){"
+    "pOpen('NET Update -> App'+slot);pSet(0,'Downloading...');"
+    "fetch('/netflash?slot='+slot+'&url='+encodeURIComponent(url))"
+    ".then(function(r){if(!r.ok)throw new Error('busy');return r.json();}).then(function(){"
+    "var last=Date.now();var iv=setInterval(function(){"
+    "if(Date.now()-last>60000){clearInterval(iv);pSet(100,'Lost contact with the device');return;}"
+    "fetch('/flashstatus').then(function(r){return r.json();}).then(function(s){"
+    "last=Date.now();if(s.pct>=0&&s.pct<=100){pSet(s.pct,s.msg);}"
+    "else if(s.pct===101){clearInterval(iv);pSet(100,'Done! Booting App'+slot+'...');}"
+    "else if(s.pct===102){clearInterval(iv);pSet(100,'Failed: '+s.msg);}"
+    "else if(!s.busy){clearInterval(iv);pSet(100,'Device restarted');}"
+    "}).catch(function(){});},500);})"
+    ".catch(function(){pSet(100,'NET update request failed - busy?');});}"
+
     // ---- confirmation modal: every action asks Yes/No first ----
     "var CONFIRM={"
     "scan:['Scan','Search for nearby WiFi networks?'],"
     "connect:['Connect','Switch network? The page will reload.'],"
     "upload:['Upload','Send this file to the device?'],"
     "flash:['Flash','Overwrite the slot, then reboot into it?'],"
+    "netupdate:['NET Update','Download this URL and flash the selected slot?'],"
     "boot:['Boot','Reboot into this app?'],"
     "web:['Web server','Change the web server state?'],"
     "del:['Delete','Delete this file permanently?'],"
@@ -513,6 +543,8 @@ static void handleRoot()
     "else if(a==='connect')connect();"
     "else if(a==='upload')go();"
     "else if(a==='flash')startFlash(el.getAttribute('data-slot'),el.getAttribute('data-name'));"
+    "else if(a==='netupdate'){var u=$('nurl').value;if(!u){$('nmsg').textContent='Select a URL';return;}"
+    "startNetFlash($('nslot').value,u);}"
     "else if(a==='get')location.href='/download?name='+encodeURIComponent(el.getAttribute('data-name'));"
     "else if(a==='del')location.href='/delete?name='+encodeURIComponent(el.getAttribute('data-name'));"
     "else if(a==='authset')location.href='/webauth?on=1&user='+encodeURIComponent($('auser').value)+'&pass='+encodeURIComponent($('apass').value);"
@@ -542,6 +574,176 @@ static void handleRoot()
 static File uploadFile;
 static bool uploadRejected = false;
 static bool uploadDenied = false;
+
+static void pngPut32(uint8_t *p, uint32_t v)
+{
+  p[0] = (v >> 24) & 0xFF;
+  p[1] = (v >> 16) & 0xFF;
+  p[2] = (v >> 8) & 0xFF;
+  p[3] = v & 0xFF;
+}
+
+static uint32_t pngCrc(const uint8_t *a, size_t an, const uint8_t *b, size_t bn)
+{
+  uint32_t crc = 0xFFFFFFFFu;
+  crc = crc32Update(crc, a, an);
+  if(b && bn) crc = crc32Update(crc, b, bn);
+  return crc ^ 0xFFFFFFFFu;
+}
+
+static uint32_t pngAdler(const uint8_t *d, size_t n)
+{
+  uint32_t a = 1, b = 0;
+  for(size_t i = 0; i < n; i++)
+  {
+    a = (a + d[i]) % 65521u;
+    b = (b + a) % 65521u;
+  }
+  return (b << 16) | a;
+}
+
+static void handleShotPng()
+{
+  if(!webAuthed()) return;
+  const int W = SCR_W, H = SCR_H;
+  const size_t rgbLen = (size_t)W * H * 3;
+  const size_t rawLen = (size_t)H * (W * 3 + 1);
+  const size_t zCap = rawLen + (rawLen / 65535 + 1) * 5 + 8;
+  uint8_t *rgb = (uint8_t *)ps_malloc(rgbLen);
+  uint8_t *raw = (uint8_t *)ps_malloc(rawLen);
+  uint8_t *z = (uint8_t *)ps_malloc(zCap);
+  uint16_t *line = (uint16_t *)malloc(W * 2);
+  if(!rgb || !raw || !z || !line)
+  {
+    free(rgb); free(raw); free(z); free(line);
+    server.send(500, "text/plain", "oom");
+    return;
+  }
+
+  for(int y = 0; y < H; y++)
+  {
+    gSprite.readRect(0, y, W, 1, line);
+    uint8_t *o = rgb + (size_t)y * W * 3;
+    for(int x = 0; x < W; x++)
+    {
+      uint16_t c = (uint16_t)((line[x] >> 8) | (line[x] << 8));
+      uint8_t r = (c >> 11) & 31, g = (c >> 5) & 63, b = c & 31;
+      *o++ = (r * 255 + 15) / 31;
+      *o++ = (g * 255 + 31) / 63;
+      *o++ = (b * 255 + 15) / 31;
+    }
+  }
+
+  uint8_t *rp = raw;
+  for(int y = 0; y < H; y++)
+  {
+    *rp++ = 0;
+    memcpy(rp, rgb + (size_t)y * W * 3, W * 3);
+    rp += W * 3;
+  }
+
+  size_t zp = 0;
+  z[zp++] = 0x78;
+  z[zp++] = 0x01;
+  size_t off = 0;
+  while(off < rawLen)
+  {
+    size_t n = rawLen - off;
+    if(n > 65535) n = 65535;
+    bool last = (off + n >= rawLen);
+    z[zp++] = last ? 1 : 0;
+    z[zp++] = n & 0xFF;
+    z[zp++] = (n >> 8) & 0xFF;
+    z[zp++] = (~n) & 0xFF;
+    z[zp++] = ((~n) >> 8) & 0xFF;
+    memcpy(z + zp, raw + off, n);
+    zp += n;
+    off += n;
+  }
+  uint32_t ad = pngAdler(raw, rawLen);
+  z[zp++] = (ad >> 24) & 0xFF;
+  z[zp++] = (ad >> 16) & 0xFF;
+  z[zp++] = (ad >> 8) & 0xFF;
+  z[zp++] = ad & 0xFF;
+
+  uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+  uint8_t ihdr[25];
+  pngPut32(ihdr, 13);
+  memcpy(ihdr + 4, "IHDR", 4);
+  pngPut32(ihdr + 8, W);
+  pngPut32(ihdr + 12, H);
+  ihdr[16] = 8; ihdr[17] = 2; ihdr[18] = 0; ihdr[19] = 0; ihdr[20] = 0;
+  pngPut32(ihdr + 21, pngCrc(ihdr + 4, 17, nullptr, 0));
+
+  uint8_t idh[8];
+  pngPut32(idh, (uint32_t)zp);
+  memcpy(idh + 4, "IDAT", 4);
+  uint8_t idc[4];
+  pngPut32(idc, pngCrc((const uint8_t *)"IDAT", 4, z, zp));
+  uint8_t iend[12] = {0,0,0,0,'I','E','N','D',0xAE,0x42,0x60,0x82};
+  size_t total = 8 + sizeof(ihdr) + sizeof(idh) + zp + sizeof(idc) + sizeof(iend);
+
+  server.setContentLength(total);
+  server.send(200, "image/png", "");
+  server.sendContent((const char *)sig, sizeof(sig));
+  server.sendContent((const char *)ihdr, sizeof(ihdr));
+  server.sendContent((const char *)idh, sizeof(idh));
+  for(size_t o = 0; o < zp; o += 4096)
+  {
+    size_t n = zp - o;
+    if(n > 4096) n = 4096;
+    server.sendContent((const char *)z + o, n);
+  }
+  server.sendContent((const char *)idc, sizeof(idc));
+  server.sendContent((const char *)iend, sizeof(iend));
+
+  free(rgb); free(raw); free(z); free(line);
+}
+
+static void handleShot()
+{
+  if(!webAuthed()) return;
+  const int W = SCR_W, H = SCR_H;
+  const size_t payload = (size_t)W * H * 3;
+  uint8_t *rgb = (uint8_t *)ps_malloc(payload);
+  uint16_t *line = (uint16_t *)malloc(W * 2);
+  if(!rgb || !line)
+  {
+    free(rgb); free(line);
+    server.send(500, "text/plain", "oom");
+    return;
+  }
+
+  for(int y = 0; y < H; y++)
+  {
+    gSprite.readRect(0, y, W, 1, line);
+    uint8_t *o = rgb + (size_t)y * W * 3;
+    for(int x = 0; x < W; x++)
+    {
+      uint16_t c = (uint16_t)((line[x] >> 8) | (line[x] << 8));
+      uint8_t r = (c >> 11) & 31;
+      uint8_t g = (c >> 5) & 63;
+      uint8_t b = c & 31;
+      *o++ = (r * 255 + 15) / 31;
+      *o++ = (g * 255 + 31) / 63;
+      *o++ = (b * 255 + 15) / 31;
+    }
+  }
+
+  char hdr[48];
+  int hl = snprintf(hdr, sizeof(hdr), "P6\n%d %d\n255\n", W, H);
+  server.setContentLength(hl + payload);
+  server.send(200, "image/x-portable-pixmap", "");
+  server.sendContent(hdr, hl);
+  for(size_t off = 0; off < payload; off += 4096)
+  {
+    size_t n = payload - off;
+    if(n > 4096) n = 4096;
+    server.sendContent((const char *)rgb + off, n);
+  }
+  free(rgb);
+  free(line);
+}
 
 static void handleUploadDone()
 {
@@ -705,6 +907,109 @@ static void handleFlash()
     return;
   }
 
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void handleNetList()
+{
+  if(!webAuthed()) return;
+  String urls[MAX_URLS];
+  int n = loadUrlList(urls, MAX_URLS);
+  String json = "[";
+  for(int i = 0; i < n; i++)
+  {
+    if(i) json += ",";
+    json += "\"" + jsonEsc(urls[i]) + "\"";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
+
+struct NetFlashJob
+{
+  String url;
+  int slot;
+};
+
+static void netFlashTask(void *arg)
+{
+  NetFlashJob *job = (NetFlashJob *)arg;
+  String url = job->url;
+  int slot = job->slot;
+  delete job;
+
+  flashSetProgress(0, "Downloading...");
+  gUiQuiet = true;
+  String fname = urlToFileName(url);
+  bool ok = downloadToFile(url, fname);
+  if(ok) flashSetProgress(55, "Flashing...");
+  if(ok) ok = flashFirmware(fname, slot);
+  gUiQuiet = false;
+
+  int pct;
+  char msg[sizeof(gFlashMsg)];
+  flashGetProgress(&pct, msg, sizeof(msg));
+  if(ok && !setBootSlot(slot))
+  {
+    flashSetProgress(102, "Could not select boot slot");
+    ok = false;
+  }
+  else if(ok) flashSetProgress(101, "Booting...");
+  else if(!ok && pct < 100) flashSetProgress(102, "Download failed");
+  else if(!ok) flashSetProgress(102, "Flash failed");
+
+  gUiRefresh = true;
+  gWebFlash = false;
+  if(ok)
+  {
+    gSprite.pushSprite(0, 0);
+    delay(2500);
+    ESP.restart();
+  }
+  gFlashBusy = false;
+  vTaskDelete(NULL);
+}
+
+static void handleNetFlash()
+{
+  if(!webAuthed()) return;
+  if(!server.hasArg("url") || !server.hasArg("slot"))
+  {
+    server.send(400, "application/json", "{\"ok\":false,\"err\":\"missing url/slot\"}");
+    return;
+  }
+  String url = server.arg("url");
+  if(!url.startsWith("http://") && !url.startsWith("https://"))
+  {
+    server.send(400, "application/json", "{\"ok\":false,\"err\":\"bad url\"}");
+    return;
+  }
+  if(gFlashBusy || uploadBusy())
+  {
+    server.send(409, "application/json", "{\"ok\":false,\"err\":\"busy\"}");
+    return;
+  }
+
+  NetFlashJob *job = new NetFlashJob;
+  if(!job)
+  {
+    server.send(500, "application/json", "{\"ok\":false,\"err\":\"oom\"}");
+    return;
+  }
+  job->url = url;
+  job->slot = server.arg("slot").toInt();
+
+  gFlashBusy = true;
+  gWebFlash = true;
+  flashSetProgress(0, "Starting...");
+  if(xTaskCreate(netFlashTask, "netflash", 8192, job, 1, nullptr) != pdPASS)
+  {
+    delete job;
+    gFlashBusy = false;
+    gWebFlash = false;
+    server.send(500, "application/json", "{\"ok\":false,\"err\":\"task\"}");
+    return;
+  }
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -996,11 +1301,15 @@ static void webServerTask(void *)
 static void startWebBackground()
 {
   server.on("/", HTTP_GET, handleRoot);
+  server.on("/shot.ppm", HTTP_GET, handleShot);
+  server.on("/shot.png", HTTP_GET, handleShotPng);
   server.on("/upload", HTTP_POST, handleUploadDone, handleUpload);
   server.on("/delete", HTTP_GET, handleDelete);
   server.on("/download", HTTP_GET, handleDownload);
   server.on("/boot", HTTP_GET, handleBoot);
   server.on("/flash", HTTP_GET, handleFlash);
+  server.on("/netlist", HTTP_GET, handleNetList);
+  server.on("/netflash", HTTP_GET, handleNetFlash);
   server.on("/flashstatus", HTTP_GET, handleFlashStatus);
   server.on("/webauth", HTTP_GET, handleWebAuth);
   server.on("/callsign", HTTP_GET, handleCallsign);

@@ -228,6 +228,7 @@
     <div class="card">
       <h2 data-i18n="s2_h"></h2>
       <p class="note" data-i18n="s2_p"></p>
+      <p class="note" style="margin-top:-4px">Merged full image is also supported. / merge 이미지도 지원됩니다.</p>
       <div class="row">
         <button class="btn" id="yes2" data-i18n="yes"></button>
         <button class="btn ghost" id="no2" data-i18n="no"></button>
@@ -294,7 +295,7 @@
     </div>
   </section>
 
-  <footer><span data-i18n="supports"></span> <b id="fver">v4.1.2 (DES)</b><br>by GNBD · <a href="https://github.com/GNBD/ats-mini-dualboot" target="_blank" rel="noopener">github.com/GNBD/ats-mini-dualboot</a></footer>
+  <footer><span data-i18n="supports"></span> <b id="fver">v4.2.2 (DES)</b><br>by GNBD · <a href="https://github.com/GNBD/ats-mini-dualboot" target="_blank" rel="noopener">github.com/GNBD/ats-mini-dualboot</a></footer>
 </div>
 
 <div class="modal" id="modal"><div class="mbox">
@@ -323,7 +324,7 @@ const I18N = {
     st1:"Device",st2:"Firmware",st3:"Terms",st4:"Flash",
     s1_h:"Boot Manager Flasher", s1_p:"Connect your ATS Mini over USB.",
     select:"Select device", next:"Next", back:"Back", chip:"Chip",
-    s2_h:"Step 2 · Firmware (optional)", s2_p:"Pre-install an app firmware (OTA .bin) now?",
+    s2_h:"Step 2 · Firmware (optional)", s2_p:"Pre-install an app firmware (OTA .bin or merged image) now?",
     yes:"Yes, choose firmware", no:"No, skip", optional:"optional", urlph:"…or paste a direct .bin URL",
     s3_h:"Step 3 · Terms & warnings", s3_p:"Please read carefully before continuing.",
     warn_h:"Warnings",
@@ -506,7 +507,7 @@ function show(n){
 let NEED=[
   {name:"ats-mini-bootloader-v4.bin", local:"firmware/ats-mini-bootloader-v4.bin", addr:0x0},
   {name:"ats-mini-partitions-v4.bin", local:"firmware/ats-mini-partitions-v4.bin", addr:0x8000},
-  {name:"ats-mini-recovery-4.1.2.bin", local:"firmware/ats-mini-recovery-4.1.2.bin", addr:0x860000},
+  {name:"ats-mini-recovery-4.2.2.bin", local:"firmware/ats-mini-recovery-4.2.2.bin", addr:0x860000},
 ];
 
 // firmware/manifest.json lists the files to flash; updating a release means

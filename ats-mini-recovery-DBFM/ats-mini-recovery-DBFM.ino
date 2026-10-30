@@ -80,8 +80,7 @@ static constexpr const lgfx::IFont* FONT_TINY  = &lgfx::fonts::Font0;
 #define COL_KEY     0x10A3            // RGB(2,5,3)
 #define COL_KEYSEL  0x1A0D            // RGB(3,16,13)
 
-// Test builds stay on "testbuild" until a release version is assigned.
-#define RECOVERY_VERSION "testbuild"
+#define RECOVERY_VERSION "4.2.2"
 
 // Default: fetch this .txt (one URL per line). Local /update_url.txt and
 // DEFAULT_UPDATE_URLS are fallbacks when the remote list is unavailable.
