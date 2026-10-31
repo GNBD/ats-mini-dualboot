@@ -183,6 +183,8 @@ table from the image if it detects a mismatch.
 
 See `NOTICE`, `LICENSE`, and `LICENSES/`.
 
+Please let me know if any licenses are missing.
+
 ---
 
 ## 한국어
