@@ -788,35 +788,87 @@ static void runFirmwareUpdate()
 }
 
 // ---------------------------------------------------------------------------
-// DBFM OTA: download the official updater app and install it into app0/app1.
-// The updater then replaces the recovery partition, so the selected slot is
-// sacrificed: its firmware is overwritten by DBFMupdater.bin.
+// DBFM OTA: download the official updater app and always install it into app0.
+// App0 is sacrificed: its firmware is replaced by DBFMupdater.bin, which then
+// rewrites the recovery partition.
 // ---------------------------------------------------------------------------
 
 static const char *DBFM_UPDATER_URL =
   "https://github.com/GNBD/ats-mini-dualboot/releases/latest/download/DBFMupdater.bin";
 static const char *DBFM_UPDATER_FILE = "DBFMupdater.bin";
 
+// Large warning modal. Rotate to choose, click to confirm, hold to cancel.
+static void drawDbfmOtaWarning(bool start)
+{
+  gSprite.fillRoundRect(8, 10, 304, 150, 10, COL_PANEL);
+  gSprite.drawRoundRect(8, 10, 304, 150, 10, COL_WARN);
+
+  gSprite.setTextDatum(TC_DATUM);
+  gSprite.setTextColor(COL_WARN, COL_PANEL);
+  gSprite.drawString("DO NOT POWER OFF", 160, 20, FONT_LARGE);
+  gSprite.fillRect(20, 44, 280, 1, COL_LINE);
+
+  gSprite.setTextColor(COL_TEXT, COL_PANEL);
+  gSprite.drawString("DBFM OTA installs the recovery updater.", 160, 52, FONT_TINY);
+  gSprite.setTextColor(COL_WARN, COL_PANEL);
+  gSprite.drawString("Target: App0 - its firmware will be ERASED.", 160, 68, FONT_TINY);
+  gSprite.setTextColor(COL_TEXT, COL_PANEL);
+  gSprite.drawString("Never unplug power or USB during the update.", 160, 84, FONT_TINY);
+  gSprite.drawString("The device reboots automatically.", 160, 100, FONT_TINY);
+  gSprite.setTextColor(COL_MUTED, COL_PANEL);
+  gSprite.drawString("Keep the battery charged and connected.", 160, 116, FONT_TINY);
+
+  const int by = 126, bw = 132, bh = 22;
+  const int bx[2] = {18, 170};
+  for(int i = 0; i < 2; i++)
+  {
+    bool sel = (i == 0) ? !start : start;
+    uint16_t acc = (i == 0) ? COL_MUTED : COL_WARN;
+    uint16_t bg = sel ? (i == 0 ? COL_PANEL2 : COL_WARN) : COL_PANEL;
+    uint16_t fg = sel ? (i == 0 ? COL_TEXT : COL_BG) : COL_MUTED;
+    gSprite.fillRoundRect(bx[i], by, bw, bh, 6, bg);
+    gSprite.drawRoundRect(bx[i], by, bw, bh, 6, sel ? acc : COL_LINE);
+    gSprite.setTextColor(fg, bg);
+    gSprite.drawString(i == 0 ? "CANCEL" : "START",
+                       bx[i] + bw / 2, by + 5, FONT_SMALL);
+  }
+  gSprite.setTextDatum(TL_DATUM);
+  gSprite.pushSprite(0, 0);
+}
+
+static bool dbfmOtaWarning()
+{
+  bool start = false;                    // default: cancel
+  drawDbfmOtaWarning(start);
+
+  for(;;)
+  {
+    int8_t d = readEncoder();
+    if(d)
+    {
+      start = !start;
+      drawDbfmOtaWarning(start);
+    }
+
+    BtnEvent ev = readButtonEvent();
+    if(ev == BTN_CLICK) return start;
+    if(ev == BTN_HOLD) return false;
+    delay(10);
+  }
+}
+
 static void runDbfmOta()
 {
-  static const char *slotNames[] = {"App0", "App1"};
-  static const int slotIcons[] = {ICON_SLOT0, ICON_SLOT1};
-  static const uint16_t slotAccs[] = {COL_OK, COL_VIOLET};
-  int slotSel = runTileChoice("DBFM OTA", "Select target slot:",
-                              "CLICK=OPEN  HOLD=BACK",
-                              slotNames, slotIcons, slotAccs, 2);
-  if(slotSel < 0) return;
-
   if(WiFi.status() != WL_CONNECTED)
   {
     uiWarn("Wi-Fi is not connected");
     return;
   }
 
-  char line[48];
-  snprintf(line, sizeof(line), "Updater -> %s", slotNames[slotSel]);
-  if(!confirmDialog("DO NOT POWER OFF", line,
-                    "Never unplug power/USB.")) return;
+  if(!dbfmOtaWarning()) return;
+
+  // DBFM OTA always uses app0. app1 and the running recovery are untouched.
+  const int slotSel = 0;
 
   String fname = DBFM_UPDATER_FILE;
   if(!downloadToFile(DBFM_UPDATER_URL, fname))
