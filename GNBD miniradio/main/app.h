@@ -255,6 +255,7 @@ extern int      s_scan_anim_ms;
 extern volatile int s_eibi_state;
 extern bool     s_fs_mounted;
 extern char     s_station[120];
+extern bool     s_hold_ring;
 extern uint32_t s_eibi_ms;
 extern uint32_t s_nav_ms;
 extern int      s_eibi_entries;

@@ -340,8 +340,6 @@ void ui_draw_about(const char *version, const char *idf, const char *build,
                           "turn: pages   press: back", DISPLAY_FONT_TINY,
                           UI_MUTED, UI_BG, DISPLAY_DATUM_TC);
     } else if (page == 1) {
-        display_draw_text(UI_W / 2, 28, "GNBD", DISPLAY_FONT_LARGE, UI_FG,
-                          UI_PANEL, DISPLAY_DATUM_TC);
         display_draw_text(UI_W / 2, 64, "MINI-RADIO FIRMWARE",
                           DISPLAY_FONT_TINY, UI_ACC_HI, UI_PANEL,
                           DISPLAY_DATUM_TC);

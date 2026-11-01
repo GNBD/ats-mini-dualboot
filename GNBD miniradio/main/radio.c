@@ -210,6 +210,12 @@ esp_err_t radio_tune(void)
 
 esp_err_t radio_apply(void)
 {
+    /* VHF(FM)로 전환할 때 SSB 로딩과 같은 모달 표시 */
+    if (s_ui.mode == RADIO_MODE_FM && s_powered &&
+        (s_radio.func != SI4732_FUNC_FM || s_ssb_prepared)) {
+        ui_draw_loading("VHF LOADING");
+        vTaskDelay(pdMS_TO_TICKS(350));
+    }
     /* 밴드/모드 전환 시 앰프와 음소거를 먼저 정리 */
     if (s_radio_ok) {
         si4732_set_mute(&s_radio, true);
@@ -862,6 +868,9 @@ void fmt_freq_short(uint32_t hz, int mode, char *buf, size_t n)
 
 void rsq_poll(uint32_t now)
 {
+    if (s_hold_ring) {
+        return;
+    }
     static uint32_t last;
     bool fast = (s_hmi == HMI_TUNE || s_hmi == HMI_SEEK);
     /* SIG spd: LOW=250ms(부드러움), HIGH=30ms(빠름) */

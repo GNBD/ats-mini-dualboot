@@ -711,6 +711,9 @@ int eibi_lookup_entries(uint16_t freq, int64_t utc, eibi_entry_t *out, int max)
 
 void eibi_refresh(void)
 {
+    if (s_hold_ring) {
+        return;
+    }
     static uint32_t last_freq;
     static int64_t last_utc_min = -1;
     static char last_name[120];

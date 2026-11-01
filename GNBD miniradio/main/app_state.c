@@ -128,6 +128,7 @@ int      s_scan_anim_ms;
 volatile int s_eibi_state;
 bool     s_fs_mounted;
 char     s_station[120];
+bool     s_hold_ring = false;
 uint32_t s_eibi_ms;
 uint32_t s_nav_ms;
 int      s_eibi_entries;

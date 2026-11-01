@@ -38,7 +38,7 @@ extern int      s_digit_place;
 extern uint8_t  s_brightness;
 extern bool     s_power_save;
 extern uint8_t  s_theme;
-extern bool     s_sta_connected;
+extern volatile bool s_sta_connected;
 extern char     s_ap_pass[9];
 extern uint8_t  s_sig_view;
 extern uint16_t s_scan_n;

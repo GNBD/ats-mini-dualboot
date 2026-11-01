@@ -683,6 +683,30 @@ void on_button(bool long_press)
     }
 }
 
+static void draw_hold_indicator(float p)
+{
+    int cx = 160;
+    int cy = 85;
+    display_fill_round_rect((int16_t)(cx - 50), (int16_t)(cy - 25), 100, 50,
+                            12, UI_PANEL);
+    display_draw_round_rect((int16_t)(cx - 50), (int16_t)(cy - 25), 100, 50,
+                            12, UI_LINE);
+    display_draw_text((int16_t)cx, (int16_t)(cy - 14), "HOLD",
+                      DISPLAY_FONT_SMALL, UI_ACC_HI, UI_PANEL,
+                      DISPLAY_DATUM_TC);
+    int bw = 80;
+    int x = cx - bw / 2;
+    int y = cy + 8;
+    display_fill_round_rect((int16_t)x, (int16_t)y, (uint16_t)bw, 8, 4,
+                            UI_TRACK);
+    int fill = (int)((float)bw * p);
+    if (fill > 0) {
+        display_fill_round_rect((int16_t)x, (int16_t)y, (uint16_t)fill, 8, 4,
+                                UI_ACC);
+    }
+    display_flush();
+}
+
 void button_poll(uint32_t now)
 {
     static bool raw = false, stable = false;
@@ -708,12 +732,31 @@ void button_poll(uint32_t now)
     }
 
     /* 길게 누르면 볼륨 조정 대신 길게 누름 동작을 바로 시작 */
-    if (stable && pressed && !long_fired && (now - press_ms) >= 800) {
-        long_fired = true;
-        if (s_digit_mode) {
-            s_digit_swallow = false;
-        } else {
-            on_button(true);
+    if (stable && pressed && !long_fired) {
+        uint32_t el = now - press_ms;
+        if (el >= 800) {
+            long_fired = true;
+            if (s_hold_ring) {
+                s_hold_ring = false;
+            }
+            if (s_digit_mode) {
+                s_digit_swallow = false;
+            } else {
+                on_button(true);
+            }
+        } else if (el >= 120) {
+            if (!s_hold_ring) {
+                s_hold_ring = true;
+            }
+            float p = (float)(el - 120) / 680.0f;
+            if (p < 0.0f) { p = 0.0f; }
+            if (p > 1.0f) { p = 1.0f; }
+            draw_hold_indicator(p);
         }
+    }
+    /* 버튼 뗌: 진행 링이 떠 있었으면 화면 복구 */
+    if (!pressed && !stable && s_hold_ring && !long_fired) {
+        s_hold_ring = false;
+        ui_draw_all(&s_ui);
     }
 }

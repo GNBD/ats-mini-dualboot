@@ -20,6 +20,7 @@
 #include "decode.h"
 #include "ui_int.h"
 #include "ui_asset.h"
+#include "app.h"
 #define ADV_HIST 64
 static uint8_t s_hist_rssi[ADV_HIST];
 static uint8_t s_hist_snr[ADV_HIST];
@@ -59,8 +60,12 @@ static void draw_saved_badges(const ui_state_t *s)
     if (bx < 52) {
         bx = 52;
     }
-    /* 배지가 사라진 경우를 포함해 배지 영역을 먼저 지운다 */
-    display_fill_rect(52, 22, (int16_t)(bx - 52), 20, UI_BG);
+    /* 배지 영역만 지운다(밴드/모드 텍스트 영역 0..104 는 보존) */
+    int cx = bx - 104;
+    if (cx < 52) {
+        cx = 52;
+    }
+    display_fill_rect((int16_t)cx, 22, (int16_t)(bx - cx), 20, UI_BG);
     if (s->ats_slot >= 0) {
         char a[16];
         snprintf(a, sizeof(a), "A%d", s->ats_slot + 1);
@@ -383,7 +388,13 @@ static int adv_kv(int x, int y, const char *label, const char *value,
 
 void ui_draw_adv_signal4b(const ui_state_t *s)
 {
+    if (s_hold_ring) {
+        return;
+    }
     if (ui_custom_active()) {
+        if (s_hold_ring) {
+            return;
+        }
         ui_custom_render(s);
         return;
     }
@@ -751,6 +762,9 @@ static void ui_draw_all_adv4(const ui_state_t *s)
 
 void ui_draw_all(const ui_state_t *s)
 {
+    if (s_hold_ring) {
+        return;
+    }
     if (ui_custom_active()) {
         ui_custom_render(s);
         return;
