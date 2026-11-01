@@ -1,6 +1,7 @@
 # DBFM — DualBoot Firmware Manager
 
 Greetings from South Korea! 🇰🇷 
+<img width="320" height="170" alt="image" src="https://github.com/user-attachments/assets/bf0fb67c-d217-4a5f-900b-ec9b10976966" />
 
 
 **v4.2.2 (DES)** · ESP32-S3 **N16R8** · SI4732 receiver
