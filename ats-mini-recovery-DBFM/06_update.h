@@ -707,18 +707,21 @@ static void runFirmwareUpdate()
                               slotNames, slotIcons, slotAccs, 2);
   if(slotSel < 0) return;
 
-  auto flashNow = [&](const String &name) -> bool
+  auto flashNow = [&](const String &name, bool removeCache) -> bool
   {
     gFlashBusy = true;
     bool ok = flashFirmware(name, slotSel);
     gFlashBusy = false;
-    if(ok && !setBootSlot(slotSel))
-    {
-      uiWarn("Could not select boot slot");
-      return false;
-    }
     if(ok)
     {
+      if(!setBootSlot(slotSel))
+      {
+        uiWarn("Could not select boot slot");
+        return false;
+      }
+      // Network downloads are a temporary cache. Keep them on a failed flash
+      // so the user can retry, remove them only after a successful write.
+      if(removeCache) LittleFS.remove("/" + name);
       delay(500);
       ESP.restart();
     }
@@ -729,7 +732,7 @@ static void runFirmwareUpdate()
   {
     String fname;
     if(!downloadOneFromUrls(fname)) return;
-    flashNow(fname);
+    flashNow(fname, true);
     return;
   }
 
@@ -779,7 +782,66 @@ static void runFirmwareUpdate()
       continue;
     }
 
-    flashNow(files[fileSel]);
+    flashNow(files[fileSel], false);
     drawFilePage(files, fileCount, fileSel, slotNames[slotSel]);
   }
+}
+
+// ---------------------------------------------------------------------------
+// DBFM OTA: download the official updater app and install it into app0/app1.
+// The updater then replaces the recovery partition, so the selected slot is
+// sacrificed: its firmware is overwritten by DBFMupdater.bin.
+// ---------------------------------------------------------------------------
+
+static const char *DBFM_UPDATER_URL =
+  "https://github.com/GNBD/ats-mini-dualboot/releases/latest/download/DBFMupdater.bin";
+static const char *DBFM_UPDATER_FILE = "DBFMupdater.bin";
+
+static void runDbfmOta()
+{
+  static const char *slotNames[] = {"App0", "App1"};
+  static const int slotIcons[] = {ICON_SLOT0, ICON_SLOT1};
+  static const uint16_t slotAccs[] = {COL_OK, COL_VIOLET};
+  int slotSel = runTileChoice("DBFM OTA", "Select target slot:",
+                              "CLICK=OPEN  HOLD=BACK",
+                              slotNames, slotIcons, slotAccs, 2);
+  if(slotSel < 0) return;
+
+  if(WiFi.status() != WL_CONNECTED)
+  {
+    uiWarn("Wi-Fi is not connected");
+    return;
+  }
+
+  char line[48];
+  snprintf(line, sizeof(line), "Updater -> %s", slotNames[slotSel]);
+  if(!confirmDialog("DO NOT POWER OFF", line,
+                    "Never unplug power/USB.")) return;
+
+  String fname = DBFM_UPDATER_FILE;
+  if(!downloadToFile(DBFM_UPDATER_URL, fname))
+  {
+    uiWarn("Download failed");
+    return;
+  }
+
+  gFlashBusy = true;
+  bool ok = flashFirmware(fname, slotSel);
+  gFlashBusy = false;
+  if(!ok)
+  {
+    // Keep the download so the same image can be retried without Wi-Fi.
+    uiWarn("Flash failed - cache kept");
+    return;
+  }
+  if(!setBootSlot(slotSel))
+  {
+    uiWarn("Could not select boot slot");
+    return;
+  }
+  LittleFS.remove("/" + fname);
+
+  drawUpdateProgress(100, "Done!", "Starting updater...");
+  delay(800);
+  ESP.restart();
 }

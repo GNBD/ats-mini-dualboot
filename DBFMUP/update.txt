@@ -1,0 +1,9 @@
+# DBFM updater v0.1 - plain-text update list
+# format: target:file
+# target = raw address (0x...) or partition name (app0/app1/recovery)
+# file   = relative asset name (same server folder) or absolute http(s) URL
+#
+# The recovery address must be 6 hex digits: 0x860000.
+0x0000:ats-mini-bootloader-v4.bin
+0x8000:ats-mini-partitions-v4.bin
+0x860000:ats-mini-recovery-4.3.3.bin

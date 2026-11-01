@@ -28,6 +28,19 @@ Boot manager firmware for the ATS Mini ESP32-S3/SI4732 receiver.
 - Do not compile anything unless asked.
 - Report validation performed and any behavior needing hardware testing.
 
+## Push checklist
+
+- Push the DBFM source, `docs/`, and `DBFMUP/` together. `DBFMUP/` holds the
+  updater app (`DBFMupdater.bin`) and the manifest it reads (`update.txt`).
+- Keep `DBFMUP/update.txt` matched to the partitions and release assets, one
+  `target:file` line each:
+  `0x0000:ats-mini-bootloader-v4.bin`,
+  `0x8000:ats-mini-partitions-v4.bin`,
+  `0x860000:ats-mini-recovery-<ver>.bin`.
+- Use relative file names so the updater resolves them against
+  `releases/latest/download/`. Update the recovery name in the same commit as
+  the version bump, and upload the same `update.txt` as a release asset.
+
 ## Release notes
 
 Use this exact shape (Korean body), matching the `v4.1.0` / `v4.1.1` releases:

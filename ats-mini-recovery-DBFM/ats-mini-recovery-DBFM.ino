@@ -80,7 +80,7 @@ static constexpr const lgfx::IFont* FONT_TINY  = &lgfx::fonts::Font0;
 #define COL_KEY     0x10A3            // RGB(2,5,3)
 #define COL_KEYSEL  0x1A0D            // RGB(3,16,13)
 
-#define RECOVERY_VERSION "4.2.2"
+#define RECOVERY_VERSION "4.3.3"
 
 // Default: fetch this .txt (one URL per line). Local /update_url.txt and
 // DEFAULT_UPDATE_URLS are fallbacks when the remote list is unavailable.
@@ -136,11 +136,11 @@ static const char *menu[] = {
 // Tiles that fit one page of the main menu (a 3x2 grid).
 #define MENU_PAGE_TILES 6
 
-// Settings > ...  (Network / Brightness / LittleFS / Backup / Guide / About /
-// Callsign)
+// Settings > ...  (Network / DBFM OTA / Erase / Brightness / LittleFS /
+// Backup / Guide / Callsign / Boot menu / About)
 static const char *settingsMenu[] = {
   "Network",
-  "Partition",
+  "DBFM OTA",
   "Erase",
   "Brightness",
   "LittleFS",

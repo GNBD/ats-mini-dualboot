@@ -244,15 +244,15 @@ static void drawWifiMenu(int selected)
 static void drawSettingsMenu(int selected)
 {
   static const char *shortNames[SETTINGS_COUNT] = {
-    "Network", "Partition", "Erase", "Bright", "Files",
+    "Network", "DBFM OTA", "Erase", "Bright", "Files",
     "Backup", "Guide", "Callsign", "Boot", "About"
   };
   static const int icons[SETTINGS_COUNT] = {
-    ICON_WIFI, ICON_DB, ICON_TRASH, ICON_BRIGHT, ICON_FOLDER,
+    ICON_WIFI, ICON_OTA, ICON_TRASH, ICON_BRIGHT, ICON_FOLDER,
     ICON_DB, ICON_BOOT, ICON_CALLSIGN, ICON_HOLD, ICON_ABOUT
   };
   static const uint16_t accs[SETTINGS_COUNT] = {
-    COL_OK, COL_WARN, COL_WARN, COL_GOLD, COL_ACC,
+    COL_OK, COL_ACC, COL_WARN, COL_GOLD, COL_ACC2,
     COL_ACC2, COL_OK, COL_VIOLET, COL_GOLD, COL_ROSE
   };
 
@@ -392,7 +392,7 @@ static void runSettingsMenu()
     if(ev == BTN_CLICK)
     {
       if(selected == 0) runWifiMenu();
-      else if(selected == 1) runPartitionManager();
+      else if(selected == 1) runDbfmOta();
       else if(selected == 2) runErase();
       else if(selected == 3) runBrightness();
       else if(selected == 4) runLittleFsManager();

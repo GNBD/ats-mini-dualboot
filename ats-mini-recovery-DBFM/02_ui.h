@@ -185,7 +185,7 @@ enum {
   ICON_SLOT0 = 0, ICON_SLOT1, ICON_UPDATE, ICON_SETTINGS, ICON_ERASE,
   ICON_WIFI, ICON_ABOUT, ICON_BRIGHT, ICON_WIFICFG, ICON_WEB,
   ICON_BOOT, ICON_HOLD, ICON_FOLDER, ICON_NET, ICON_TRASH, ICON_DB,
-  ICON_CALLSIGN
+  ICON_CALLSIGN, ICON_OTA
 };
 
 static void uiMenuIcon(int id, int cx, int cy, uint16_t acc)
@@ -216,6 +216,16 @@ static void uiMenuIcon(int id, int cx, int cy, uint16_t acc)
       gSprite.setTextColor(acc, COL_CELL);
       gSprite.drawString(id == ICON_SLOT0 ? "0" : "1", cx, cy - 7, FONT_SMALL);
       gSprite.setTextDatum(TL_DATUM);
+      break;
+    }
+    case ICON_OTA: // same arrow-into-tray glyph as the main OTA tile
+    {
+      gSprite.drawFastVLine(cx, cy - 14, 17, acc);
+      gSprite.drawLine(cx - 7, cy - 3, cx, cy + 5, acc);
+      gSprite.drawLine(cx + 7, cy - 3, cx, cy + 5, acc);
+      gSprite.drawLine(cx - 12, cy + 11, cx + 12, cy + 11, acc);
+      gSprite.drawLine(cx - 12, cy + 11, cx - 12, cy + 6, acc);
+      gSprite.drawLine(cx + 12, cy + 11, cx + 12, cy + 6, acc);
       break;
     }
     case ICON_UPDATE: // download into tray

@@ -95,6 +95,7 @@ static int loadUrlList(String *urls, int maxCount);
 static bool downloadToFile(const String &url, const String &fname);
 static int downloadAllFromUrls();
 static void runFirmwareUpdate();
+static void runDbfmOta();
 static void drawEraseList(const EraseList &list, const bool *checked, int selected);
 static void drawResetProgress(const char *label, int percent, int overall);
 static bool erasePartitionProgress(const esp_partition_t *part, const char *label, int overallStart, int overallEnd);
