@@ -8,10 +8,8 @@ Preview: https://gnbdatsmini.netlify.app/
 GNBD miniradio의 **Dual Boot + Theme Version** 펌웨어 소스입니다.
 
 - Product: **GNBD miniradio**
-- Build: **Dual Boot + Theme Version**
-- Firmware version: **1.1.24**
+**Dual Boot + Theme Version**
 - Target: **ESP32-S3 N16R8 + SI4732**
-- Flash layout: ATS Mini Dualboot 16MB (`app0` / `app1` / `recovery`)
 
 `main/`은 ESP-IDF 애플리케이션 컴포넌트 이름입니다. 빌드 경로와 CMake 구성이
 `main`을 기준으로 잡혀 있으므로 폴더명을 바꾸지 마세요.
