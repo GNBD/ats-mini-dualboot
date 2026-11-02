@@ -1,7 +1,6 @@
 /*
  * SPDX-FileCopyrightText: 2025 ESP32-SI4732 Radio
  * SPDX-FileCopyrightText: 2026 Max Arnold
- * SPDX-FileCopyrightText: miniradio Contributors
  * SPDX-License-Identifier: MIT
  *
  * ST7789 LCD 드라이버 — LovyanGFX 백엔드 (8080 병렬 8비트).

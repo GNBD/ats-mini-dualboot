@@ -9,8 +9,8 @@
 const band_desc_t band_table[] = {
     /* name   mode          min_hz      max_hz       step_hz  ham   */
     { "VHF",  RADIO_MODE_FM, 64000000,  108000000,    100000, false },
-    { "MW",   RADIO_MODE_AM,   520000,    1710000,      1000, false },
-    { "LW",   RADIO_MODE_AM,   153000,     279000,      1000, false },
+    { "MW",   RADIO_MODE_AM,   520000,    1710000,      9000, false },
+    { "LW",   RADIO_MODE_AM,   153000,     279000,      9000, false },
     { "SW",   RADIO_MODE_AM,  2300000,  26100000,       5000, false },
     { "160m", RADIO_MODE_LSB, 1800000,   2000000,       1000, true  },
     { "80m",  RADIO_MODE_LSB, 3500000,   4000000,       1000, true  },

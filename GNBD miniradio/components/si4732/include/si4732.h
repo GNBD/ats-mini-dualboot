@@ -102,6 +102,24 @@ typedef struct {
     uint8_t errors;       /* 블록별 오류도 (2bit × 4: A,B,C,D) */
 } si4732_rds_t;
 
+/* GET_INT_STATUS 응답 (AN332 0x14: STATUS 바이트 자체가 인터럽트 상태) */
+typedef struct {
+    bool    stc;   /* STCINT: 시크/튠 완료 */
+    bool    rds;   /* RDSINT */
+    bool    rsq;   /* RSQINT */
+    bool    err;   /* ERR */
+    bool    cts;   /* CTS */
+    uint8_t raw;   /* STATUS 원본 */
+} si4732_int_status_t;
+
+/* FM/AM_AGC_STATUS 응답 (AN332 0x27 / 0x47) */
+typedef struct {
+    bool    agc_enabled; /* false = AGCDIS (AGC 정지) */
+    uint8_t index;       /* 현재 AGC 이득 인덱스 (FM 0–26, AM 0–37+) */
+    uint8_t raw1;        /* RESP1 원본 */
+    uint8_t raw2;        /* RESP2 원본 */
+} si4732_agc_status_t;
+
 /**
  * @brief 드라이버 초기화: I²C 장치 등록 + (선택) 외부 RESET 펄스
  */
@@ -158,14 +176,16 @@ esp_err_t si4732_set_fm_bandwidth(si4732_t *dev, uint8_t code);
 /** @brief Disable the SI4732 FM debug mode (property 0xFF00). */
 esp_err_t si4732_disable_fm_debug(si4732_t *dev);
 
-/** @brief AM 채널 필터 (si4732_am_bandwidth_t) */
-esp_err_t si4732_set_am_bandwidth(si4732_t *dev, si4732_am_bandwidth_t bw);
+/** @brief AM 채널 필터 (si4732_am_bandwidth_t)
+ *  @param line_filter true = AMPLFLT(bit8, 전원선 험 제거) 활성 */
+esp_err_t si4732_set_am_bandwidth(si4732_t *dev, si4732_am_bandwidth_t bw,
+                                  bool line_filter);
 
 /** @brief FM 디엠퍼시스 (true=75µs, false=50µs) */
 esp_err_t si4732_set_deemphasis(si4732_t *dev, bool us75);
 
-/** @brief FM 스테레오 강제/자동 (false=모노 강제) */
-esp_err_t si4732_set_stereo(si4732_t *dev, bool enable);
+/** @brief FM 스테레오 강제 모노/자동 (true = 모노 강제, false = AUTO) */
+esp_err_t si4732_set_stereo(si4732_t *dev, bool force_mono);
 
 /** @brief FM_RSQ_STATUS */
 esp_err_t si4732_fm_rsq(si4732_t *dev, si4732_rsq_t *out);
@@ -188,6 +208,45 @@ esp_err_t si4732_set_mute(si4732_t *dev, bool mute);
 /** @brief GPO1 출력 설정 (0=FM, 1=AM/SSB 밴드 스위치) */
 esp_err_t si4732_set_gpo1(si4732_t *dev, bool level);
 
+/** @brief GET_INT_STATUS (0x14) — 인터럽트 상태 갱신/조회 */
+esp_err_t si4732_get_int_status(si4732_t *dev, si4732_int_status_t *out);
+
+/** @brief FM_AGC_STATUS (0x27) — 현재 AGC 설정/이득 인덱스 조회 */
+esp_err_t si4732_fm_agc_status(si4732_t *dev, si4732_agc_status_t *out);
+
+/** @brief AM_AGC_STATUS (0x47) — 현재 AGC 설정/이득 인덱스 조회 (AM/SSB) */
+esp_err_t si4732_am_agc_status(si4732_t *dev, si4732_agc_status_t *out);
+
+/** @brief GPIO_CTL (0x80) — GPO1/2/3 출력 enable 설정 */
+esp_err_t si4732_gpio_ctl(si4732_t *dev, bool gpo1_oen, bool gpo2_oen,
+                          bool gpo3_oen);
+
+/** @brief GPIO_SET (0x81) — GPO1/2/3 레벨 설정 */
+esp_err_t si4732_gpio_set(si4732_t *dev, bool gpo1, bool gpo2, bool gpo3);
+
+/**
+ * @brief GPO_IEN(0x0001) — 인터럽트 소스/리피트 설정
+ * @param stcien STC 인터럽트, rsqien RSQ, errien ERR, ctsien CTS
+ * @param stcrep STC 반복, rsqrep RSQ 반복
+ */
+esp_err_t si4732_gpo_ien(si4732_t *dev, bool stcien, bool rsqien,
+                         bool errien, bool ctsien, bool stcrep, bool rsqrep);
+
+/**
+ * @brief 임의 명령 전송 (탈출구)
+ *
+ * @param cmd     명령 opcode (예: 0x14)
+ * @param args    인자 버퍼 (없으면 NULL)
+ * @param args_len 인자 길이
+ * @param resp    응답 버퍼. STATUS 바이트는 제외한 payload가 담긴다.
+ *                NULL이면 응답을 읽지 않는다.
+ * @param resp_len 응답 payload 길이
+ * @return ESP_OK, 또는 ERR 응답 시 ESP_ERR_INVALID_RESPONSE
+ */
+esp_err_t si4732_raw(si4732_t *dev, uint8_t cmd,
+                     const uint8_t *args, size_t args_len,
+                     uint8_t *resp, size_t resp_len);
+
 /** @brief FM 소프트 뮤트 최대 감쇠 (0–63 dB, 0=비활성) */
 esp_err_t si4732_set_fm_soft_mute(si4732_t *dev, uint8_t atten_db);
 
@@ -209,11 +268,42 @@ esp_err_t si4732_fm_agc_override(si4732_t *dev, bool rf_agc_disable,
 /** @brief AM/SSB 소프트 뮤트 최대 감쇠 (0–63 dB, 0=비활성) */
 esp_err_t si4732_set_am_soft_mute(si4732_t *dev, uint8_t atten_db);
 
-/** @brief AM/SSB 프런트엔드 AGC on/off (off = 감쇠/수동) */
+/** @brief AM/SSB 프런트엔드 AGC on/off (off = 감쇠 없이 최대 이득) */
 esp_err_t si4732_set_am_agc(si4732_t *dev, bool enable);
 
-/** @brief AM/SSB 자동 볼륨 제어 최대 이득 (0–63) */
-esp_err_t si4732_set_am_avc_max_gain(si4732_t *dev, uint8_t gain);
+/** @brief AM/SSB AGC 정지 + 고정 감쇠 인덱스 (0=max gain, 37+=max attn) */
+esp_err_t si4732_set_am_agc_attn(si4732_t *dev, uint8_t index);
+
+/** @brief AM/SSB 자동 볼륨 제어 최대 이득 (12–90 dB, AN332 g*340.2) */
+esp_err_t si4732_set_am_avc_max_gain(si4732_t *dev, uint8_t gain_db);
+
+/**
+ * @brief AM 노이즈 블랭커 설정 (AN332 0x3900–0x3904)
+ * @param rate     블랭킹 레이트 (100 Hz 단위, 기본 64)
+ * @param interval 대체 구간 (µs)
+ * @param iir      노이즈 플로어 추정 대역 (Hz, 기본 300)
+ * @note Si474x 전용 기능일 수 있음. 지원하지 않으면 ERR 응답.
+ */
+esp_err_t si4732_set_am_noise_blank(si4732_t *dev, uint16_t rate,
+                                    uint16_t interval, uint16_t iir);
+
+/** @brief AM NB 검출 임계값 (0x3900, dB) */
+esp_err_t si4732_set_am_nb_threshold(si4732_t *dev, uint16_t threshold_db);
+
+/** @brief AM NB 블랭킹 지연 (0x3904, µs) */
+esp_err_t si4732_set_am_nb_delay(si4732_t *dev, uint16_t delay_us);
+
+/**
+ * @brief AM NB 지원 여부 probe
+ *
+ * 0x3902(AM_NB_RATE)에 값을 쓰고 읽어 칩이 수용하는지 확인한 뒤
+ * 원래 값으로 복원한다.
+ *
+ * @param supported true = 칩이 값을 수용함 (NB 동작 가능성)
+ *                  false = 값 무시됨 (Si474x 전용 추정)
+ * @return 통신 실패 시 ESP_ERR_INVALID_RESPONSE
+ */
+esp_err_t si4732_am_nb_probe(si4732_t *dev, bool *supported);
 
 #ifdef __cplusplus
 }

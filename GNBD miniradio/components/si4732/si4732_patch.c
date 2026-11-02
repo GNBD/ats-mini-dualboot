@@ -112,8 +112,15 @@ esp_err_t si4732_load_ssb_patch(si4732_t *dev, const uint8_t *data, size_t size)
 esp_err_t si4732_set_ssb_mode(si4732_t *dev, si4732_ssb_bandwidth_t bw,
                               bool avc_en, bool smute_snr, bool dsp_afc_dis)
 {
+    /* AN332 0x0101 SBCUTFLT[7:4]:
+       0 = band-pass (recommended when AUDIOBW is about 2 kHz or below)
+       1 = low-pass  (wider audio bandwidths: 2.2 / 3 / 4 kHz) */
+    uint8_t sbcutflt = (bw == SI4732_SSB_BW_1K2HZ ||
+                        bw == SI4732_SSB_BW_500HZ ||
+                        bw == SI4732_SSB_BW_1KHZ) ? 0u : 1u;
+
     uint16_t v = ((uint16_t)bw & 0x000F)      /* AUDIOBW   [3:0]  */
-               | (0x0u << 4)                    /* SBCUTFLT  [7:4]  기본 */
+               | ((uint16_t)sbcutflt << 4)      /* SBCUTFLT  [7:4]  */
                | (0x0u << 8)                    /* AVC_DIVIDER [11:8] SSB=0 */
                | (avc_en     ? (1u << 12) : 0)  /* AVCEN     [12]   */
                | (smute_snr  ? (1u << 13) : 0)  /* SMUTESEL  [13]   */
@@ -142,6 +149,15 @@ esp_err_t si4732_ssb_prepare(si4732_t *dev, si4732_ssb_bandwidth_t bw)
         return err;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
+    /* PU2CLR package sequence: queryLibraryId() then patchPowerUp().
+       The query leaves the part powered up in FUNC=15; the following
+       POWER_UP (PATCH|FUNC=AM) reconfigures it. Non-fatal on failure. */
+    si4732_library_id_t lib_id;
+    if (si4732_query_library_id(dev, &lib_id) == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(2));
+    } else {
+        ESP_LOGW(TAG, "library id query failed (continuing)");
+    }
     err = si4732_patch_power_up(dev);
     if (err != ESP_OK) {
         return err;

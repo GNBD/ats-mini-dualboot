@@ -19,7 +19,7 @@
 static const char *TAG = "si4732";
 
 #define CTS_POLL_INTERVAL_MS   1
-#define TUNE_SETTLE_MS         30   /* ?�닝 ???�디???��?�?*/
+#define TUNE_SETTLE_MS         20   /* ?�닝 ???�디???��?�?*/
 #define POWERUP_SETTLE_MS      500   /* ?�리?�탈 ?�정??*/
 
 /* ---------------------------------------------------------------- init */
@@ -110,18 +110,27 @@ esp_err_t si4732_bus_reset(si4732_t *dev)
 
 /* ------------------------------------------------------- ?�?��? ?�틸 */
 
-esp_err_t si4732_wait_cts(si4732_t *dev)
+static esp_err_t si4732_wait_cts_checked(si4732_t *dev, bool check_err)
 {
     uint8_t status = 0;
     for (uint32_t t = 0; t < dev->timeout_ms; t++) {
         ESP_RETURN_ON_ERROR(i2c_master_receive(dev->i2c, &status, 1, dev->timeout_ms),
                             TAG, "i2c status read failed");
         if (status & SI4732_STATUS_CTS) {
+            if (check_err && (status & SI4732_STATUS_ERR)) {
+                ESP_LOGE(TAG, "command failed (status=0x%02X)", status);
+                return ESP_ERR_INVALID_RESPONSE;
+            }
             return ESP_OK;
         }
         vTaskDelay(pdMS_TO_TICKS(CTS_POLL_INTERVAL_MS));
     }
     return ESP_ERR_TIMEOUT;
+}
+
+esp_err_t si4732_wait_cts(si4732_t *dev)
+{
+    return si4732_wait_cts_checked(dev, false);
 }
 
 esp_err_t si4732_write(si4732_t *dev, const uint8_t *buf, size_t len)
@@ -148,7 +157,7 @@ esp_err_t si4732_command(si4732_t *dev, uint8_t cmd, const uint8_t *args, size_t
         ESP_LOGE(TAG, "cmd 0x%02X write failed: %s", cmd, esp_err_to_name(err));
         return err;
     }
-    return si4732_wait_cts(dev);
+    return si4732_wait_cts_checked(dev, true);
 }
 
 esp_err_t si4732_read_response(si4732_t *dev, uint8_t *payload, size_t payload_len)
@@ -259,6 +268,55 @@ esp_err_t si4732_get_property(si4732_t *dev, uint16_t prop, uint16_t *value)
     return ESP_OK;
 }
 
+/* --------------------------------------------------- ?�터?�트 / AGC */
+
+esp_err_t si4732_get_int_status(si4732_t *dev, si4732_int_status_t *out)
+{
+    ESP_RETURN_ON_FALSE(out, ESP_ERR_INVALID_ARG, TAG, "null out");
+    ESP_RETURN_ON_ERROR(si4732_wait_cts(dev), TAG, "cts");
+    uint8_t cmd = SI4732_CMD_GET_INT_STATUS;
+    ESP_RETURN_ON_ERROR(si4732_write(dev, &cmd, 1), TAG, "int status write");
+    ESP_RETURN_ON_ERROR(si4732_wait_cts(dev), TAG, "cts");
+
+    uint8_t st = 0;
+    ESP_RETURN_ON_ERROR(i2c_master_receive(dev->i2c, &st, 1, dev->timeout_ms),
+                        TAG, "int status read");
+    out->raw = st;
+    out->cts = (st & SI4732_STATUS_CTS) != 0;
+    out->err = (st & SI4732_STATUS_ERR) != 0;
+    out->rsq = (st & SI4732_STATUS_RSQINT) != 0;
+    out->rds = (st & SI4732_STATUS_RDSINT) != 0;
+    out->stc = (st & SI4732_STATUS_STCINT) != 0;
+    return ESP_OK;
+}
+
+/* AGC_STATUS는 STATUS + RESP1(AGCDIS) + RESP2(AGCIDX) 3바이트 응답 */
+static esp_err_t si4732_agc_status(si4732_t *dev, uint8_t cmd,
+                                   si4732_agc_status_t *out)
+{
+    ESP_RETURN_ON_FALSE(out, ESP_ERR_INVALID_ARG, TAG, "null out");
+    uint8_t resp[2] = { 0, 0 };
+    esp_err_t err = si4732_command_read(dev, cmd, NULL, 0, resp, sizeof(resp));
+    if (err != ESP_OK) {
+        return err;
+    }
+    out->raw1 = resp[0];
+    out->raw2 = resp[1];
+    out->agc_enabled = (resp[0] & 0x01) == 0;   /* AGCDIS */
+    out->index = resp[1];
+    return ESP_OK;
+}
+
+esp_err_t si4732_fm_agc_status(si4732_t *dev, si4732_agc_status_t *out)
+{
+    return si4732_agc_status(dev, SI4732_CMD_FM_AGC_STATUS, out);
+}
+
+esp_err_t si4732_am_agc_status(si4732_t *dev, si4732_agc_status_t *out)
+{
+    return si4732_agc_status(dev, SI4732_CMD_AM_AGC_STATUS, out);
+}
+
 /* ------------------------------------------------------------- ?�닝 */
 
 esp_err_t si4732_fm_tune(si4732_t *dev, uint32_t freq_hz)
@@ -296,8 +354,10 @@ esp_err_t si4732_am_tune(si4732_t *dev, uint32_t freq_hz, si4732_sideband_t sb)
         arg1,
         (uint8_t)(units >> 8),
         (uint8_t)(units & 0xFF),
-        0x00,                    /* ANTCAPH: auto */
-        0x00,                    /* ANTCAPL: auto */
+        0x00,                    /* ANTCAPH */
+        /* AN332 0x40: SW (above 1.8 MHz) requires ANTCAPH=0, ANTCAPL=1.
+           MW/LW keep automatic capacitor tuning (0 = auto). */
+        (uint8_t)(units > 1800u ? 1u : 0u)
     };
     esp_err_t err = si4732_command(dev, SI4732_CMD_AM_TUNE_FREQ, args, sizeof(args));
     if (err != ESP_OK) {
@@ -340,8 +400,8 @@ esp_err_t si4732_am_tune_fast(si4732_t *dev, uint32_t freq_hz,
         arg1,
         (uint8_t)(units >> 8),
         (uint8_t)(units & 0xFF),
-        0x00,
-        0x00,
+        0x00,                    /* ANTCAPH */
+        (uint8_t)(units > 1800u ? 1u : 0u)   /* ANTCAPL: SW = 1 */
     };
     esp_err_t err = si4732_command(dev, SI4732_CMD_AM_TUNE_FREQ, args,
                                    sizeof(args));
@@ -365,11 +425,14 @@ esp_err_t si4732_seek_start(si4732_t *dev, bool up,
     if (spacing < 1u) {
         spacing = 1u;
     }
-    if (rssi_threshold > 127u) {
-        rssi_threshold = 127u;
+    /* AN332: FM seek thresholds are 7-bit (0..127), AM seek thresholds
+       are 6-bit (0..63). Writing out-of-range values is undefined. */
+    uint8_t thr_max = fm ? 127u : 63u;
+    if (rssi_threshold > thr_max) {
+        rssi_threshold = thr_max;
     }
-    if (snr_threshold > 127u) {
-        snr_threshold = 127u;
+    if (snr_threshold > thr_max) {
+        snr_threshold = thr_max;
     }
 
     esp_err_t err;
@@ -400,7 +463,7 @@ esp_err_t si4732_seek_start(si4732_t *dev, bool up,
         if (err != ESP_OK) {
             return err;
         }
-        uint8_t arg = (uint8_t)(up ? SI4732_SEEK_UP : 0);
+        uint8_t arg = (uint8_t)((up ? SI4732_SEEK_UP : 0) | SI4732_SEEK_WRAP);
         return si4732_command(dev, SI4732_CMD_FM_SEEK_START, &arg, 1);
     }
 
@@ -429,7 +492,7 @@ esp_err_t si4732_seek_start(si4732_t *dev, bool up,
         return err;
     }
     uint8_t args[5] = {
-        (uint8_t)(up ? SI4732_SEEK_UP : 0),
+        (uint8_t)((up ? SI4732_SEEK_UP : 0) | SI4732_SEEK_WRAP),
         0x00, 0x00, 0x00,
         (uint8_t)(bottom > 1800u ? 1u : 0u),
     };
@@ -493,18 +556,90 @@ esp_err_t si4732_disable_fm_debug(si4732_t *dev)
     return err;
 }
 
-esp_err_t si4732_set_am_bandwidth(si4732_t *dev, si4732_am_bandwidth_t bw)
+esp_err_t si4732_set_am_bandwidth(si4732_t *dev, si4732_am_bandwidth_t bw,
+                                  bool line_filter)
 {
     if (bw > SI4732_AM_BW_2K5HZ) {
         bw = SI4732_AM_BW_2KHZ;
     }
-    return si4732_set_property(dev, SI4732_PROP_AM_CHANNEL_FILTER, (uint16_t)bw);
+    /* AM_CHANNEL_FILTER: bits3:0 = AMCHFLT, bit8 = AMPLFLT
+       (AM power-line noise rejection, 100 Hz HPF). Bits 7:4 are
+       reserved and must stay 0. */
+    uint16_t val = (uint16_t)bw;
+    if (line_filter) {
+        val |= 0x0100;
+    }
+    return si4732_set_property(dev, SI4732_PROP_AM_CHANNEL_FILTER, val);
 }
 
 esp_err_t si4732_set_deemphasis(si4732_t *dev, bool us75)
 {
     /* AN332: 10 = 75 µs, 01 = 50 µs */
     return si4732_set_property(dev, SI4732_PROP_FM_DEEMPHASIS, us75 ? 2 : 1);
+}
+
+/* ------------------------------------------------------- AM/DM NB (probe) */
+
+/* NB 속성 (0x3900–0x3904)은 Si474x 전용으로 간주된다. Si4732에서
+   SET_PROPERTY가 ERR로 응답하거나 쓴 값이 GET_PROPERTY로 읽히지 않으면
+   지원하지 않는 것으로 본다. 이 함수들은 쓰기 후 읽어 검증한다. */
+
+esp_err_t si4732_set_am_noise_blank(si4732_t *dev, uint16_t rate,
+                                    uint16_t interval, uint16_t iir)
+{
+    esp_err_t err;
+    err = si4732_set_property(dev, SI4732_PROP_AM_NB_RATE, rate);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = si4732_set_property(dev, SI4732_PROP_AM_NB_INTERVAL, interval);
+    if (err != ESP_OK) {
+        return err;
+    }
+    return si4732_set_property(dev, SI4732_PROP_AM_NB_IIR_FILTER, iir);
+}
+
+esp_err_t si4732_set_am_nb_threshold(si4732_t *dev, uint16_t threshold_db)
+{
+    return si4732_set_property(dev, SI4732_PROP_AM_NB_DETECT_THRESHOLD,
+                               threshold_db);
+}
+
+esp_err_t si4732_set_am_nb_delay(si4732_t *dev, uint16_t delay_us)
+{
+    return si4732_set_property(dev, SI4732_PROP_AM_NB_DELAY, delay_us);
+}
+
+/* NB 지원 여부 판정: 대표 속성(0x3902 RATE)에 값을 쓰고 읽어본다.
+   읽힌 값이 쓴 값과 같으면 지원, 다르면 미지원으로 간주한다. */
+esp_err_t si4732_am_nb_probe(si4732_t *dev, bool *supported)
+{
+    ESP_RETURN_ON_FALSE(supported, ESP_ERR_INVALID_ARG, TAG, "null out");
+    *supported = false;
+
+    uint16_t orig = 0;
+    bool have_orig = (si4732_get_property(dev, SI4732_PROP_AM_NB_RATE,
+                                          &orig) == ESP_OK);
+
+    /* 쓰기: 기존 값과 다른 값을 넣어 확실히 변화를 만든다 */
+    uint16_t test = have_orig && orig == 64u ? 65u : 64u;
+    esp_err_t err = si4732_set_property(dev, SI4732_PROP_AM_NB_RATE, test);
+    if (err != ESP_OK) {
+        /* SET이 ERR → 미지원 */
+        return ESP_OK;
+    }
+
+    uint16_t rb = 0;
+    err = si4732_get_property(dev, SI4732_PROP_AM_NB_RATE, &rb);
+    if (err == ESP_OK && rb == test) {
+        *supported = true;
+    }
+
+    /* 원래 값 복원 (읽었다면) */
+    if (have_orig) {
+        si4732_set_property(dev, SI4732_PROP_AM_NB_RATE, orig);
+    }
+    return ESP_OK;
 }
 
 esp_err_t si4732_set_stereo(si4732_t *dev, bool force_mono)
@@ -626,6 +761,48 @@ esp_err_t si4732_set_mute(si4732_t *dev, bool mute)
                                     : SI4732_RX_HARD_MUTE_NONE);
 }
 
+esp_err_t si4732_gpio_ctl(si4732_t *dev, bool gpo1_oen, bool gpo2_oen,
+                          bool gpo3_oen)
+{
+    /* AN332: D1 = GPO1OEN, D2 = GPO2OEN, D3 = GPO3OEN */
+    uint8_t arg = (uint8_t)((gpo1_oen ? 0x02 : 0) |
+                            (gpo2_oen ? 0x04 : 0) |
+                            (gpo3_oen ? 0x08 : 0));
+    return si4732_command(dev, SI4732_CMD_GPIO_CTL, &arg, 1);
+}
+
+esp_err_t si4732_gpio_set(si4732_t *dev, bool gpo1, bool gpo2, bool gpo3)
+{
+    uint8_t arg = (uint8_t)((gpo1 ? 0x02 : 0) |
+                            (gpo2 ? 0x04 : 0) |
+                            (gpo3 ? 0x08 : 0));
+    return si4732_command(dev, SI4732_CMD_GPIO_SET, &arg, 1);
+}
+
+esp_err_t si4732_gpo_ien(si4732_t *dev, bool stcien, bool rsqien,
+                         bool errien, bool ctsien, bool stcrep, bool rsqrep)
+{
+    /* AN332 GPO_IEN (0x0001): D0 STCIEN, D1 RSQIEN, D2 ERRIEN,
+       D3 CTSIEN, D8 STCREP, D9 RSQREP */
+    uint16_t val = (uint16_t)((stcien ? 0x0001u : 0) |
+                              (rsqien ? 0x0002u : 0) |
+                              (errien ? 0x0004u : 0) |
+                              (ctsien ? 0x0008u : 0) |
+                              (stcrep ? 0x0100u : 0) |
+                              (rsqrep ? 0x0200u : 0));
+    return si4732_set_property(dev, SI4732_PROP_GPO_IEN, val);
+}
+
+esp_err_t si4732_raw(si4732_t *dev, uint8_t cmd,
+                     const uint8_t *args, size_t args_len,
+                     uint8_t *resp, size_t resp_len)
+{
+    if (!resp || resp_len == 0) {
+        return si4732_command(dev, cmd, args, args_len);
+    }
+    return si4732_command_read(dev, cmd, args, args_len, resp, resp_len);
+}
+
 esp_err_t si4732_set_gpo1(si4732_t *dev, bool level)
 {
     /* GPO1 is the antenna switch: 0 = FM, 1 = AM/SSB.
@@ -644,8 +821,19 @@ esp_err_t si4732_set_fm_soft_mute(si4732_t *dev, uint8_t atten_db)
     if (atten_db > 63) {
         atten_db = 63;
     }
-    return si4732_set_property(dev, SI4732_PROP_FM_SOFT_MUTE_MAX_ATTENUATION,
-                               atten_db);
+    esp_err_t err = si4732_set_property(dev,
+                                        SI4732_PROP_FM_SOFT_MUTE_MAX_ATTENUATION,
+                                        atten_db);
+    if (err != ESP_OK || atten_db == 0) {
+        return err;
+    }
+    /* AN332: recommended SMSLOPE = ceil(SMATTN / SMTHR). The default
+       FM_SOFT_MUTE_SNR_THRESHOLD is 4 dB. */
+    uint8_t slope = (uint8_t)((atten_db + 3u) / 4u);
+    if (slope < 1u) {
+        slope = 1u;
+    }
+    return si4732_set_property(dev, SI4732_PROP_FM_SOFT_MUTE_SLOPE, slope);
 }
 
 esp_err_t si4732_fm_agc_override(si4732_t *dev, bool rf_agc_disable,
@@ -677,21 +865,43 @@ esp_err_t si4732_set_am_soft_mute(si4732_t *dev, uint8_t atten_db)
 esp_err_t si4732_set_am_agc(si4732_t *dev, bool enable)
 {
     /* AN332 Command 0x48 AM_AGC_OVERRIDE: ARG1 bit0=1 이면 AGC 비활성,
-       ARG2 = 강제 이득 인덱스(0=최소 감쇠, 37+ATTN_BACKUP=최대 감쇠) */
+       ARG2 = 강제 이득 인덱스(0=최소 감쇠(최대 이득), 37+ATTN_BACKUP=최대 감쇠)
+       SSB 패치는 실질적으로 AGC ON/OFF만 지원하므로 OFF일 때는 감쇠 없이 0을 쓴다. */
     uint8_t args[2] = {
         (uint8_t)(enable ? 0x00 : 0x01),
-        (uint8_t)(enable ? 0x00 : 18)
+        (uint8_t)(enable ? 0x00 : 0x00)
     };
+    return si4732_command(dev, SI4732_CMD_AM_AGC_OVERRIDE, args, sizeof(args));
+}
+
+esp_err_t si4732_set_am_agc_attn(si4732_t *dev, uint8_t index)
+{
+    /* Force AGC off with a fixed gain index:
+       0 = minimum attenuation (max gain), 37 + ATTN_BACKUP = max attenuation. */
+    uint8_t args[2] = { 0x01, index };
     return si4732_command(dev, SI4732_CMD_AM_AGC_OVERRIDE, args, sizeof(args));
 }
 
 esp_err_t si4732_set_am_avc_max_gain(si4732_t *dev, uint8_t gain_db)
 {
-    /* AN332 property 0x3103: Q8.8 고정소수점 (16 dB = 0x1000) */
+    /* AN332 property 0x3103: AVC_MAXGAIN = g * 340.2 (g in dB).
+       Valid range 0x1000..0x7800 = 12..90 dB; 12 dB is the recommended
+       minimum when soft mute is enabled. */
+    if (gain_db < 12) {
+        gain_db = 12;
+    }
     if (gain_db > 90) {
         gain_db = 90;
     }
-    uint16_t v = (uint16_t)((uint16_t)gain_db * 256u);
+    uint16_t v = (uint16_t)((uint32_t)gain_db * 340u);
+    /* AN332 range is 0x1000..0x7800; 12 dB * 340 = 0x0FF0, so clamp the
+       raw register value too. */
+    if (v < 0x1000u) {
+        v = 0x1000u;
+    }
+    if (v > 0x7800u) {
+        v = 0x7800u;
+    }
     return si4732_set_property(dev,
                                SI4732_PROP_AM_AUTOMATIC_VOLUME_CONTROL_MAX_GAIN,
                                v);
