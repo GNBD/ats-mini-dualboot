@@ -251,6 +251,8 @@ void ui_draw_options(const ui_options_t *o)
     if (o->slider) {
         if (o->value == 0 && o->zero_label) {
             snprintf(buf, sizeof(buf), "%s", o->zero_label);
+        } else if (o->value == 1 && o->one_label) {
+            snprintf(buf, sizeof(buf), "%s", o->one_label);
         } else {
             snprintf(buf, sizeof(buf), "%d%s", o->value + o->value_offset,
                      o->unit ? o->unit : "");

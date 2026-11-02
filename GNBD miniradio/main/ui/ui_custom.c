@@ -17,7 +17,6 @@
 #include "ui_runtime.h"
 #include "decode.h"
 
-extern bool s_agc_on;
 extern uint8_t s_softmute;
 extern uint8_t s_avc;
 extern bool s_squelch_on;
@@ -247,7 +246,7 @@ static const char *str_bind(uint8_t b, const ui_state_t *s, char *buf, size_t n)
     case UC_B_BFO:
         snprintf(buf, n, "%+ld", (long)s_bfo);
         return buf;
-    case UC_B_AGC:   return s_agc_on ? "ON" : "OFF";
+    case UC_B_AGC:   return agc_label();
     case UC_B_SM:
         snprintf(buf, n, "%u", (unsigned)s_softmute);
         return buf;
@@ -270,7 +269,7 @@ static const char *str_bind(uint8_t b, const ui_state_t *s, char *buf, size_t n)
         return buf;
     case UC_B_LINE2:
         snprintf(buf, n, "BFO %+ld AGC %s SM %u", (long)s_bfo,
-                 s_agc_on ? "ON" : "OFF", (unsigned)s_softmute);
+                 agc_label(), (unsigned)s_softmute);
         return buf;
     case UC_B_LINE3: {
         const char *afc = !s->have_rsq ? "--" : (s->rsq.afc_rail ? "RA" : "OK");

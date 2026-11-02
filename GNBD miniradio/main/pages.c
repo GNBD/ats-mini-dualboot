@@ -117,6 +117,96 @@ void page_redraw(void)
     }
 }
 
+/* 현재 HMI 화면 전체를 다시 그린다.
+   HOLD 팝업이 지워진 자리를 현재 화면 기준으로 복원할 때 쓴다.
+   (ui_draw_all()은 라디오 화면만 그리므로 다른 화면에서 쓰면
+   화면이 라디오로 바뀌어 버린다.) */
+void page_restore(void)
+{
+    switch (s_hmi) {
+    case HMI_TUNE:
+    case HMI_SEEK:
+        ui_draw_all(&s_ui);
+        break;
+    case HMI_DECODE:
+        ui_decode_refresh();
+        break;
+    case HMI_MENU:
+        rmenu_build();
+        ui_draw_radio_panel(&s_ui);
+        ui_draw_side_list(UI_TAB_MENU, &s_rmenu, &s_ui);
+        break;
+    case HMI_SET:
+        settings_build();
+        ui_draw_radio_panel(&s_ui);
+        ui_draw_side_list(UI_TAB_SET, &s_settings, &s_ui);
+        break;
+    case HMI_FAV:
+        ui_draw_radio_panel(&s_ui);
+        fav_side_draw();
+        break;
+    case HMI_ATS_LIST:
+        ui_draw_radio_panel(&s_ui);
+        ats_side_draw();
+        break;
+    case HMI_OPT:
+        ui_draw_options(&s_opt);
+        break;
+    case HMI_QUICK:
+        ui_draw_quick(&s_ui, s_quick_cursor);
+        break;
+    case HMI_QUICKCFG:
+        ui_draw_quick_cfg(s_qcfg_cur, s_qcfg_top, s_quick_mask);
+        break;
+    case HMI_VOL:
+        ui_draw_volume(&s_ui, true);
+        break;
+    case HMI_WIFIAPP:
+        wifi_app_draw();
+        break;
+    case HMI_SCANNING:
+        ui_draw_wifi_scanning(0);
+        break;
+    case HMI_WIFISCAN:
+        scan_list_draw();
+        break;
+    case HMI_KEYPAD:
+        ui_draw_keypad(&s_kp);
+        break;
+    case HMI_HOME:
+        ui_draw_home(&s_ui, s_home_sel, g_apps, APP_COUNT);
+        break;
+    case HMI_CLOCK:
+        ui_draw_clock(&s_ui);
+        break;
+    case HMI_WEATHER:
+        weather_redraw();
+        break;
+    case HMI_SCAN:
+        ui_draw_spectrum(&s_ui, band_table[s_spec_band].name, s_spec_min,
+                         s_spec_max, s_spec_rssi, s_spec_snr, s_spec_count,
+                         s_spec_idx, s_spec_cursor, s_spec_done);
+        break;
+    case HMI_TIMESET:
+        timeset_draw();
+        break;
+    case HMI_EIBI:
+        ui_draw_eibi_app(s_eibi_cursor, eibi_available(),
+                         eibi_record_count());
+        break;
+    case HMI_EIBI_VIEW:
+        ui_draw_eibi_view(s_eibi_view_cur, s_eibi_view_top,
+                          eibi_record_count());
+        break;
+    case HMI_EIBI_DL:
+        ui_draw_eibi_dl(s_eibi_entries, s_eibi_bytes, 0);
+        break;
+    default:
+        break;
+    }
+    toast_redraw();
+}
+
 void enter_home(void)
 {
     power_radio_off();

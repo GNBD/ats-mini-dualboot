@@ -19,18 +19,14 @@
 #include "eibi.h"
 #include "decode.h"
 #include "ui_int.h"
+#include "hmi.h"
 
 void ui_draw_quick(const ui_state_t *s, int cursor)
 {
     ui_draw_all(s);
 
     uint8_t list[UI_QUICK_MAX];
-    int n = 0;
-    for (int i = 0; i < UI_QA_COUNT && n < UI_QUICK_MAX; ++i) {
-        if (s_quick_mask & (1u << i)) {
-            list[n++] = (uint8_t)i;
-        }
-    }
+    int n = quick_build(list);
     if (n == 0) {
         return;
     }

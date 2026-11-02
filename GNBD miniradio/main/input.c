@@ -745,18 +745,24 @@ void button_poll(uint32_t now)
                 on_button(true);
             }
         } else if (el >= 120) {
-            if (!s_hold_ring) {
-                s_hold_ring = true;
+            /* 메인 라디오 화면(HMI_TUNE)에서는 HOLD 팝업을 표시하지 않는다.
+               팝업을 그리지 않으므로 s_hold_ring도 세팅하지 않아
+               버튼 뗄 때 화면 복구(ui_draw_all)가 떠 있는 토스트를
+               덮어쓰지 않도록 한다. */
+            if (s_hmi != HMI_TUNE) {
+                if (!s_hold_ring) {
+                    s_hold_ring = true;
+                }
+                float p = (float)(el - 120) / 680.0f;
+                if (p < 0.0f) { p = 0.0f; }
+                if (p > 1.0f) { p = 1.0f; }
+                draw_hold_indicator(p);
             }
-            float p = (float)(el - 120) / 680.0f;
-            if (p < 0.0f) { p = 0.0f; }
-            if (p > 1.0f) { p = 1.0f; }
-            draw_hold_indicator(p);
         }
     }
-    /* 버튼 뗌: 진행 링이 떠 있었으면 화면 복구 */
+    /* 버튼 뗌: 진행 링이 떠 있었으면 화면 복구 (현재 HMI 기준) */
     if (!pressed && !stable && s_hold_ring && !long_fired) {
         s_hold_ring = false;
-        ui_draw_all(&s_ui);
+        page_restore();
     }
 }

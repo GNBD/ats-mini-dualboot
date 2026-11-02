@@ -51,7 +51,7 @@ enum {
     /* 프리셋 / RDS */
     RM_FAV, RM_RDS, RM_STEREO, RM_DEEMPH,
     /* 오디오 */
-    RM_VOLUME, RM_AGC, RM_RFGAIN, RM_AVC, RM_SOFTMUTE, RM_SQUELCH,
+    RM_VOLUME, RM_AGC, RM_RFGAIN, RM_AVC, RM_SOFTMUTE, RM_LINEFLT, RM_SQUELCH,
     /* 모드 슬롯 (NEWPROJECT 규칙이 연결되는 UI 요소) */
     RM_MOD_A, RM_MOD_B, RM_MOD_C, RM_MOD_D,
     RM_MOD_E, RM_MOD_F, RM_MOD_G, RM_MOD_H,
@@ -122,6 +122,9 @@ typedef enum {
     WEB_CMD_WIFI_STA,
     WEB_CMD_WIFI_SCAN,
     WEB_CMD_RADIO,
+    WEB_CMD_AM_LINE_FLT,
+    WEB_CMD_AM_NB,                    /* NB on/off (연구용) */
+    WEB_CMD_AM_NB_PROBE,              /* NB 수용 여부 probe */
     WEB_CMD_UTC,
     WEB_CMD_TIME,
     WEB_CMD_FOLLOW,
@@ -165,8 +168,8 @@ extern uint32_t s_sleep_deadline;
 extern bool     s_sleep_armed;
 
 extern storage_ext_t s_ext;
-extern bool     s_agc_on;
-extern uint8_t  s_rfgain;   /* FM RF 이득: 0=AUTO, 1..27 = LNA 인덱스+1 */
+extern int8_t   s_agc_idx;  /* -1=AUTO, 0..N=AGC off + fixed index */
+extern uint8_t  s_rfgain;    /* legacy FM LNA value */
 extern uint8_t  s_softmute;
 extern uint8_t  s_avc;
 extern bool     s_squelch_on;
@@ -362,7 +365,10 @@ void toast_redraw(void);
 esp_err_t radio_set_volume(void);
 int mode_dsp_slot(radio_mode_t m);
 void dsp_apply(void);
-void rfgain_apply(void);
+void agc_apply(void);
+const char *agc_label(void);
+uint8_t agc_max_idx(void);
+int agc_sel_index(void);
 esp_err_t cpu_apply(int mhz);
 void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data);
 void sntp_start(void);
@@ -426,6 +432,12 @@ int bw_max(void);
 int bw_index(int slot, int code);
 int16_t radio_bfo_value(void);
 esp_err_t bw_apply(void);
+bool radio_am_line_filter(void);
+esp_err_t radio_set_am_line_filter(bool on);
+bool radio_am_nb(void);
+int radio_nb_probe_result(void);      /* -1=미실행, 0=미지원, 1=지원 */
+esp_err_t radio_set_am_nb(bool on);
+esp_err_t radio_nb_probe(void);
 int preset_index_for_freq(uint32_t freq, int band);
 int ats_index_for_freq(uint32_t freq, int band);
 const char *preset_name_at(int idx);
@@ -442,6 +454,7 @@ void page_radio(void);
 void page_menu(void);
 void page_set(void);
 void page_redraw(void);
+void page_restore(void);
 void side_move(ui_list_t *l, ui_tab_t tab, int d);
 int64_t days_from_civil(int y, int m, int d);
 void civil_from_days(int64_t z, int *y, int *m, int *d);

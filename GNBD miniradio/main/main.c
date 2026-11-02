@@ -204,22 +204,58 @@ int mode_dsp_slot(radio_mode_t m)
     }
 }
 
-/**
- * @brief FM RF LNA 이득 적용 (s_rfgain: 0=AUTO, 1..27 = LNA 인덱스+1)
- *
- * AUTO는 RF AGC를 다시 켜고, 그 외에는 AGC를 정지시켜 이득을 고정한다.
- */
-void rfgain_apply(void)
+/* AGC control: -1 = AUTO, 0..N = AGC off with a fixed gain index.
+   FM LNA index range is 0..26; AM/SSB AGC index range is 0..37. */
+uint8_t agc_max_idx(void)
 {
-    if (!s_radio_ok || s_radio.func != SI4732_FUNC_FM) {
+    return (s_radio.func == SI4732_FUNC_FM) ? 26u : 37u;
+}
+
+int agc_sel_index(void)
+{
+    if (s_agc_idx < 0) {
+        return 0;                 /* AUTO */
+    }
+    if (s_agc_idx == 0) {
+        return 1;                 /* OFF (same as index 0) */
+    }
+    return (int)s_agc_idx + 1;    /* slider value: 2..N+1 */
+}
+
+const char *agc_label(void)
+{
+    static char buf[8];
+    if (s_agc_idx < 0) {
+        return "AUTO";
+    }
+    if (s_agc_idx == 0) {
+        return "OFF";
+    }
+    snprintf(buf, sizeof(buf), "%d", (int)s_agc_idx);
+    return buf;
+}
+
+void agc_apply(void)
+{
+    if (!s_radio_ok) {
         return;
     }
-    esp_err_t err = (s_rfgain == 0)
-                    ? si4732_fm_agc_override(&s_radio, false, 0)
-                    : si4732_fm_agc_override(&s_radio, true,
-                                             (uint8_t)(s_rfgain - 1));
+    esp_err_t err;
+    uint8_t idx = (s_agc_idx < 0) ? 0u : (uint8_t)s_agc_idx;
+    if (idx > agc_max_idx()) {
+        idx = agc_max_idx();
+    }
+    if (s_radio.func == SI4732_FUNC_FM) {
+        err = (s_agc_idx < 0)
+              ? si4732_fm_agc_override(&s_radio, false, 0)
+              : si4732_fm_agc_override(&s_radio, true, idx);
+    } else {
+        err = (s_agc_idx < 0)
+              ? si4732_set_am_agc(&s_radio, true)
+              : si4732_set_am_agc_attn(&s_radio, idx);
+    }
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "fm agc override failed (%s)", esp_err_to_name(err));
+        ESP_LOGW(TAG, "agc apply failed (%s)", esp_err_to_name(err));
     }
 }
 
@@ -229,10 +265,12 @@ void dsp_apply(void)
         return;
     }
     if (s_radio.func == SI4732_FUNC_FM) {
+        /* FM soft mute stays at the previous fixed value; the AM/SSB
+           SOFTMUTE setting must not change FM behaviour. */
         si4732_set_fm_soft_mute(&s_radio, 16);
-        rfgain_apply();
+        agc_apply();
     } else {
-        si4732_set_am_agc(&s_radio, s_agc_on);
+        agc_apply();
         si4732_set_am_avc_max_gain(&s_radio, s_avc);
         si4732_set_am_soft_mute(&s_radio, s_softmute);
     }

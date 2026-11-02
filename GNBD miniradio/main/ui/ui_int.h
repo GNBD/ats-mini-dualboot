@@ -23,7 +23,6 @@ extern "C" {
 #endif
 
 /* DX 화면용 상태 (app.h의 bw_label/mode_str와 이름 충돌 회피) */
-extern bool     s_agc_on;
 extern uint8_t  s_avc;
 extern uint8_t  s_softmute;
 extern bool     s_squelch_on;

@@ -260,7 +260,7 @@ void ui_draw_adv_signal4(const ui_state_t *s)
         snprintf(smv, sizeof(smv), "%u", s_softmute);
     }
     snprintf(pre, sizeof(pre), "BFO %+ld  AGC %s  SM ", (long)s_bfo,
-             s_agc_on ? "ON" : "OFF");
+             agc_label());
     display_fill_rect(8, 136, 224, 14, UI_BG);
     display_draw_text(8, 136, pre, DISPLAY_FONT_TINY, UI_FG, UI_BG,
                       DISPLAY_DATUM_TL);
@@ -454,7 +454,7 @@ void ui_draw_adv_signal4b(const ui_state_t *s)
     x = 180;
     snprintf(pb, sizeof(pb), "%+ld", (long)s_bfo);
     x = adv_kv(x, 90, "BFO ", pb, UI_MUTED);
-    x = adv_kv(x + 6, 90, "AGC ", s_agc_on ? "ON" : "OFF", UI_MUTED);
+    x = adv_kv(x + 6, 90, "AGC ", agc_label(), UI_MUTED);
     adv_kv(x + 6, 90, "SM ", smv, s_softmute ? UI_RED : UI_MUTED);
 
     x = 180;

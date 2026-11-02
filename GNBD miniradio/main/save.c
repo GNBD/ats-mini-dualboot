@@ -87,7 +87,9 @@ void snapshot_fill(void)
             s_cfg.band_valid |= (uint16_t)(1u << i);
         }
     }
-    s_ext.agc_on = s_agc_on ? 1 : 0;
+    /* AGC index: AUTO=9, fixed index 0..37 = 10..47.
+       Values outside that range (legacy agc_on) map to AUTO. */
+    s_ext.agc_on = (uint8_t)((s_agc_idx < 0) ? 9 : (s_agc_idx + 10));
     s_ext.soft_mute = s_softmute;
     s_ext.avc_gain = s_avc;
     s_ext.squelch_on = s_squelch_on ? 1 : 0;
@@ -102,7 +104,8 @@ void snapshot_fill(void)
     }
     s_ext.utc_min = s_utc_min;
     s_ext.reserved2[0] = (uint8_t)((s_follow_browser ? 1u : 0u) |
-                                   ((uint32_t)(s_sig_view & 0x07u) << 1));
+                                   ((uint32_t)(s_sig_view & 0x07u) << 1) |
+                                   (radio_am_line_filter() ? 0u : 0x10u));
     s_ext.batt_view = s_batt_view;
     s_ext.unit_mode = s_unit_mode;
     s_ext.screen_off = (uint8_t)(s_screen_sec > 120 ? 120 : s_screen_sec);
@@ -156,9 +159,6 @@ void restore_settings(const storage_settings_t *cfg)
     s_cfg = *cfg;
     s_bw[0] = (cfg->bw[0] <= 4) ? cfg->bw[0] : 0;
     s_bw[1] = (cfg->bw[1] <= 6) ? cfg->bw[1] : 1;
-    if (s_bw[1] == 3) {
-        s_bw[1] = 1;
-    }
     s_bw[2] = (cfg->bw[2] <= 5) ? cfg->bw[2] : 1;
     for (int i = 0; i < 3; ++i) {
         int n = step_count(i);
@@ -194,7 +194,11 @@ void restore_settings(const storage_settings_t *cfg)
         s_quick_mask = qcfg.mask;
     }
     storage_load_ext(&s_ext);
-    s_agc_on = s_ext.agc_on != 0;
+    if (s_ext.agc_on >= 9 && s_ext.agc_on <= 47) {
+        s_agc_idx = (int8_t)(s_ext.agc_on - 10);
+    } else {
+        s_agc_idx = -1;   /* legacy / invalid -> AUTO */
+    }
     storage_load_rf_gain(&s_rfgain);
     s_softmute = s_ext.soft_mute;
     if (s_softmute == 0) {
@@ -225,6 +229,9 @@ void restore_settings(const storage_settings_t *cfg)
     if (s_sig_view > 1) {
         s_sig_view = 0;
     }
+    /* bit4 = LINE FILTER off (0 = ON; ATS-mini 기본과 동일). 이 비트는
+       저장 플래그이며 칩 프로퍼티(AM_CHANNEL_FILTER bit8)와는 별개. */
+    radio_set_am_line_filter((s_ext.reserved2[0] & 0x10) == 0);
 
 
     s_batt_view = (s_ext.batt_view <= 4) ? s_ext.batt_view : 3;

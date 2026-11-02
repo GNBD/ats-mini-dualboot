@@ -307,24 +307,22 @@ static const char WEB_ROOT_MAIN[] =
     "<option value='0'>50us</option><option value='1'>75us</option>"
     "</select></div>"
     "<div class='setrow'><span class='k'>AGC</span>"
-    "<select id='ragc' onchange='radioSet(\"agc\",this.value)'>"
-    "<option value='0'>ON</option><option value='1'>OFF</option>"
-    "</select></div>"
+    "<select id='ragc' onchange='radioSet(\"agc\",this.value)'></select></div>"
     "<div class='setrow'><span class='k'>Squelch</span>"
     "<span class='v' id='rsqv'>OFF</span></div>"
     "<input class='rset' id='rsq' type='range' min='0' max='100' value='0'"
     " oninput='$(\"rsqv\").textContent=this.value==0?\"OFF\":this.value'"
     " onchange='radioSet(\"squelch\",this.value)'>"
-    "<div class='setrow'><span class='k'>AVC gain</span>"
+    "<div id='ravcWrap'><div class='setrow'><span class='k'>AVC gain</span>"
     "<span class='v' id='ravcv'>0 dB</span></div>"
     "<input class='rset' id='ravc' type='range' min='0' max='90' value='0'"
     " oninput='$(\"ravcv\").textContent=this.value+\" dB\"'"
-    " onchange='radioSet(\"avc\",this.value)'>"
-    "<div class='setrow'><span class='k'>Soft mute</span>"
+    " onchange='radioSet(\"avc\",this.value)'></div>"
+    "<div id='rsmWrap'><div class='setrow'><span class='k'>Soft mute</span>"
     "<span class='v' id='rsmv'>0 dB</span></div>"
     "<input class='rset' id='rsm' type='range' min='0' max='63' value='0'"
     " oninput='$(\"rsmv\").textContent=this.value+\" dB\"'"
-    " onchange='radioSet(\"softmute\",this.value)'>"
+    " onchange='radioSet(\"softmute\",this.value)'></div>"
     "<div id='rbfoWrap' style='display:none'><div class='setrow'>"
     "<span class='k'>BFO</span><span class='v' id='rbfov'>0 Hz</span></div>"
     "<input class='rset' id='rbfo' type='range' min='-1000' max='1000' value='0'"
@@ -367,6 +365,13 @@ static const char WEB_ROOT_JS[] =
     "list.forEach(n=>{const x=document.createElement('button');"
     "x.className='chipbtn'+(s.mode===n?' on':'');x.textContent=n;"
     "x.onclick=()=>cmd('mode='+n);m.appendChild(x);});}"
+    "function buildAgc(s){const el=$('ragc');const max=s.agc_max|0;const k=String(max);"
+    "if(el.dataset.k!==k){el.innerHTML='';"
+    "const a=document.createElement('option');a.value=0;a.textContent='AUTO';el.appendChild(a);"
+    "const b=document.createElement('option');b.value=1;b.textContent='OFF';el.appendChild(b);"
+    "for(let i=1;i<=max;i++){const o=document.createElement('option');o.value=i+1;o.textContent=i;el.appendChild(o);}"
+    "el.dataset.k=k;}"
+    "if(document.activeElement!==el)el.value=s.agc_sel;}"
     "function fillSel(el,arr,v){const k=arr.join('|');"
     "if(el.dataset.k!==k){el.innerHTML='';arr.forEach((n,i)=>{"
     "const o=document.createElement('option');o.value=i;o.textContent=n;"
@@ -386,16 +391,18 @@ static const char WEB_ROOT_JS[] =
     "$('wifi').textContent=s.wifi;$('wifi').className='pill';"
     "$('vol').textContent=s.volume;"
     "if(!dragging)$('volrange').value=s.volume;"
-    "buildBands(s);buildModes(s);"
+    "buildBands(s);buildModes(s);buildAgc(s);"
     "if(bandsBuilt){[...$('bands').children].forEach((x,i)=>"
     "x.className='chipbtn'+(i===s.band_idx?' on':''));}"
-    "const fm=s.band==='FM';"
+    "const fm=s.mode==='FM';"
     "$('rstereoRow').style.display=fm?'':'none';"
     "$('rrdsRow').style.display=fm?'':'none';"
     "$('rdeemphRow').style.display=fm?'':'none';"
+    "$('ravcWrap').style.display=fm?'none':'';"
+    "$('rsmWrap').style.display=fm?'none':'';"
     "fillSel($('rstep'),s.steps,s.step);fillSel($('rbw'),s.bws,s.bw);"
     "$('rstereo').value=s.stereo_force?'1':'0';$('rrds').value=s.rds?'0':'1';"
-    "$('rdeemph').value=s.deemph75?'1':'0';$('ragc').value=s.agc?'0':'1';"
+    "$('rdeemph').value=s.deemph75?'1':'0';"
     "if(!rdrag){$('rsq').value=s.squelch_on?s.squelch:0;"
     "$('ravc').value=s.avc;$('rsm').value=s.softmute;"
     "$('rbfo').min=-s.bfo_max;$('rbfo').max=s.bfo_max;$('rbfo').value=s.bfo;}"
@@ -1293,6 +1300,7 @@ esp_err_t http_status_handler(httpd_req_t *req)
         "\"step\":%d,\"steps\":[%s],\"bw\":%d,\"bws\":[%s],"
         "\"bfo\":%ld,\"bfo_max\":%d,\"ssb\":%s,"
         "\"rds\":%s,\"stereo_force\":%s,\"deemph75\":%s,\"agc\":%s,"
+        "\"agc_idx\":%d,\"agc_sel\":%d,\"agc_max\":%u,"
         "\"avc\":%u,\"softmute\":%u,\"squelch_on\":%s,\"squelch\":%u,"
         "\"squelch_type\":\"%s\","
         "\"rssi\":%d,\"snr\":%d,\"volume\":%u,\"vmax\":%u,"
@@ -1300,7 +1308,8 @@ esp_err_t http_status_handler(httpd_req_t *req)
         "\"wifi\":\"%s\",\"ip\":\"%s\",\"ssid\":\"%s\","
         "\"utc_min\":%d,\"follow\":%s,"
         "\"date\":\"%04d-%02d-%02d\",\"clock\":\"%02d:%02d\","
-        "\"seeking\":%s,\"radio\":%s,\"station\":\"%s\"}",
+        "\"seeking\":%s,\"radio\":%s,\"lineflt\":%s,\"nb\":%s,\"nbprobe\":%d,"
+        "\"station\":\"%s\"}",
         freq, (unsigned long)s_ui.freq_hz, band_table[s_ui.band_idx].name,
         s_ui.band_idx, bands, mode_str(s_ui.mode),
         (s_ui.mode == RADIO_MODE_FM && s_ui.stereo) ? "true" : "false",
@@ -1310,7 +1319,8 @@ esp_err_t http_status_handler(httpd_req_t *req)
         s_rds_on ? "true" : "false",
         s_stereo_force ? "true" : "false",
         s_deemph_75 ? "true" : "false",
-        s_agc_on ? "true" : "false",
+        (s_agc_idx < 0) ? "true" : "false",
+        (int)s_agc_idx, agc_sel_index(), (unsigned)agc_max_idx(),
         s_avc, s_softmute,
         s_squelch_on ? "true" : "false",
         s_squelch_on ? s_squelch_thr[sq] : 0,
@@ -1324,6 +1334,8 @@ esp_err_t http_status_handler(httpd_req_t *req)
         s_utc_min, s_follow_browser ? "true" : "false",
         yy, mo, dd, hh, mm,
         s_ui.seeking ? "true" : "false", s_ui.radio_ok ? "true" : "false",
+        radio_am_line_filter() ? "true" : "false",
+        radio_am_nb() ? "true" : "false", radio_nb_probe_result(),
         station);
     if (n < 0) {
         n = 0;
@@ -1528,7 +1540,27 @@ esp_err_t http_cmd_handler(httpd_req_t *req)
         }
     } else if (httpd_query_key_value(q, "radio", val, sizeof(val)) == ESP_OK) {
         int item = -1;
-        if (strcmp(val, "step") == 0) {
+        if (strcmp(val, "lineflt") == 0) {
+            /* AMPLFLT (AM power-line filter) toggle: v=0/1 */
+            if (httpd_query_key_value(q, "v", arg, sizeof(arg)) != ESP_OK ||
+                !parse_int(arg, &c.a)) {
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad value");
+                return ESP_FAIL;
+            }
+            c.type = WEB_CMD_AM_LINE_FLT;
+            c.a = (c.a != 0);
+        } else if (strcmp(val, "nb") == 0) {
+            /* NB toggle (연구용): v=0/1 */
+            if (httpd_query_key_value(q, "v", arg, sizeof(arg)) != ESP_OK ||
+                !parse_int(arg, &c.a)) {
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad value");
+                return ESP_FAIL;
+            }
+            c.type = WEB_CMD_AM_NB;
+            c.a = (c.a != 0);
+        } else if (strcmp(val, "nbprobe") == 0) {
+            c.type = WEB_CMD_AM_NB_PROBE;
+        } else if (strcmp(val, "step") == 0) {
             item = RM_STEP;
         } else if (strcmp(val, "bw") == 0) {
             item = RM_BW;

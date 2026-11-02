@@ -137,6 +137,7 @@ typedef struct {
     int value;
     const char *unit;      /* 값 접미사 (예: "%", " dB", "m") */
     const char *zero_label;/* value==0 일 때 대신 표시 (예: "OFF") */
+    const char *one_label; /* value==1 일 때 대신 표시 (예: "OFF") */
     int value_offset;      /* 표시값 보정 (표시 = value + offset, 기본 0) */
     bool live;             /* true = 회전 시 즉시 적용 */
 } ui_options_t;

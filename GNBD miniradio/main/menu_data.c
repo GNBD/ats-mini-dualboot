@@ -23,6 +23,7 @@ static const menu_entry_t s_menu[] = {
     { RM_RFGAIN, "RF GAIN", 1 },
     { RM_AVC, "AVC", 1 },
     { RM_SOFTMUTE, "SOFTMUTE", 1 },
+    { RM_LINEFLT, "LINE FLT", 1 },
     { RM_SQUELCH, "SQUELCH", 1 },
     { RM_SETTINGS, "SETTINGS", 1 },
 };

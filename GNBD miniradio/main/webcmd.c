@@ -264,6 +264,27 @@ void web_cmd_execute(const web_cmd_t *c)
         }
         break;
 
+    case WEB_CMD_AM_LINE_FLT: {
+        esp_err_t err = radio_set_am_line_filter(c->a != 0);
+        toast(err == ESP_OK ? (c->a ? "LINE FLT ON" : "LINE FLT OFF")
+                            : "LINE FLT ERR");
+    } break;
+
+    case WEB_CMD_AM_NB: {
+        esp_err_t err = radio_set_am_nb(c->a != 0);
+        toast(err == ESP_OK ? (c->a ? "NB ON" : "NB OFF") : "NB ERR");
+    } break;
+
+    case WEB_CMD_AM_NB_PROBE: {
+        esp_err_t err = radio_nb_probe();
+        if (err == ESP_OK) {
+            int r = radio_nb_probe_result();
+            toast(r == 1 ? "NB: SUPPORTED" : "NB: NOT SUPPORTED");
+        } else {
+            toast("NB PROBE ERR");
+        }
+    } break;
+
     case WEB_CMD_UTC: {
         int v = c->a;
         if (v < -720) {

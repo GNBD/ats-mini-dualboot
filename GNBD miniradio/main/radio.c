@@ -25,6 +25,71 @@
 
 static const char *TAG = "radio";
 
+/* AMPLFLT: AM power-line noise rejection filter (AM_CHANNEL_FILTER bit8).
+   ATS-mini enables it for AM; kept runtime-switchable for A/B tests. */
+static bool s_am_line_filter = true;
+
+bool radio_am_line_filter(void)
+{
+    return s_am_line_filter;
+}
+
+esp_err_t radio_set_am_line_filter(bool on)
+{
+    s_am_line_filter = on;
+    if (!s_radio_ok || s_ui.mode != RADIO_MODE_AM) {
+        return ESP_OK;
+    }
+    return si4732_set_am_bandwidth(&s_radio,
+                                   (si4732_am_bandwidth_t)s_bw[1],
+                                   s_am_line_filter);
+}
+
+/* NB (noise blanker) — Si474x 전용 추정, probe로 수용 여부 확인.
+   UI 메뉴 없이 web 토글로만 조작 (연구용). */
+static bool s_am_nb = false;
+static int  s_nb_probe = -1;   /* -1 = 미실행, 0 = 미지원, 1 = 지원 */
+
+bool radio_am_nb(void)
+{
+    return s_am_nb;
+}
+
+int radio_nb_probe_result(void)
+{
+    return s_nb_probe;
+}
+
+esp_err_t radio_set_am_nb(bool on)
+{
+    s_am_nb = on;
+    if (!s_radio_ok || s_ui.mode == RADIO_MODE_FM) {
+        return ESP_OK;
+    }
+    if (on) {
+        /* PU2CLR 기본값: rate 64, interval 55 µs, iir 300 Hz */
+        return si4732_set_am_noise_blank(&s_radio, 64, 55, 300);
+    }
+    /* OFF: 블랭킹 레이트 0 = 공백 없음 (기본 복원에 준함) */
+    return si4732_set_am_noise_blank(&s_radio, 0, 55, 300);
+}
+
+/* 쓰기-읽기 probe. AM 컴포넌트 활성 상태에서만 의미가 있다. */
+esp_err_t radio_nb_probe(void)
+{
+    if (!s_radio_ok || s_ui.mode == RADIO_MODE_FM) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    bool ok = false;
+    esp_err_t err = si4732_am_nb_probe(&s_radio, &ok);
+    if (err != ESP_OK) {
+        s_nb_probe = -1;
+        return err;
+    }
+    s_nb_probe = ok ? 1 : 0;
+    return ESP_OK;
+}
+
 static si4732_sideband_t radio_sideband(void)
 {
     switch (s_ui.mode) {
@@ -45,11 +110,9 @@ int16_t radio_bfo_value(void)
     }
     uint32_t base = ((s_ui.freq_hz + 500u) / 1000u) * 1000u;
     int16_t fine = (int16_t)((int32_t)s_ui.freq_hz - (int32_t)base);
-    if (s_ui.mode == RADIO_MODE_LSB) {
-        bfo += fine;
-    } else {
-        bfo -= fine;
-    }
+    /* BFO = tuned - requested frequency. Use the same sign for LSB and USB
+       (matches the ats-mini reference implementation). */
+    bfo -= fine;
     return bfo;
 }
 
@@ -60,10 +123,11 @@ static uint32_t s_ats_draw_ms;
 #define SEEK_RSSI_MIN 4
 #define SEEK_SNR_MIN  1
 #define SEEK_FM_RSSI_MIN 5
-#define SEEK_FM_SNR_MIN  1
+#define SEEK_FM_SNR_MIN  2
 #define SEEK_AM_RSSI_MIN 10
-#define SEEK_AM_SNR_MIN  1
-#define SEEK_COMPLETE_GRACE_MS 100
+#define SEEK_AM_SNR_MIN  3
+#define SEEK_HW_TIMEOUT_MS     15000   /* abort a stuck hardware seek */
+#define SEEK_STATUS_RETRY       3
 static bool s_ssb_prepare_failed;
 
 static void scan_draw_radio(void)
@@ -126,7 +190,8 @@ esp_err_t radio_ensure_mode(void)
             }
             ui_draw_radio_freq(&s_ui);
         }
-        si4732_set_am_bandwidth(&s_radio, (si4732_am_bandwidth_t)s_bw[1]);
+        /* SSB bandwidth is controlled by SSB_MODE.AUDIOBW; AM_CHANNEL_FILTER
+           is an AM-only control (AN332). */
         si4732_set_ssb_mode(&s_radio, (si4732_ssb_bandwidth_t)s_bw[2],
                             true, false, true);
         si4732_set_bfo(&s_radio, radio_bfo_value());
@@ -161,11 +226,51 @@ esp_err_t radio_ensure_mode(void)
     if (func == SI4732_FUNC_FM) {
         si4732_set_fm_bandwidth(&s_radio, s_bw[0]);
     } else {
-        si4732_set_am_bandwidth(&s_radio, (si4732_am_bandwidth_t)s_bw[1]);
+        si4732_set_am_bandwidth(&s_radio, (si4732_am_bandwidth_t)s_bw[1],
+                                s_am_line_filter);
     }
     si4732_set_gpo1(&s_radio, func == SI4732_FUNC_AM);
     dsp_apply();
     return ESP_OK;
+}
+
+/* Match the displayed frequency to the chip's tune resolution
+   (FM 10 kHz, AM 1 kHz). SSB keeps the fine frequency; BFO handles it. */
+static uint32_t radio_round_tuned_freq(uint32_t freq_hz)
+{
+    if (s_ui.mode == RADIO_MODE_FM) {
+        return ((freq_hz + 5000u) / 10000u) * 10000u;
+    }
+    if (!band_is_ssb(s_ui.mode)) {
+        return ((freq_hz + 500u) / 1000u) * 1000u;
+    }
+    return freq_hz;
+}
+
+/* FM tune wrapper: a new station invalidates RDS data, and the fixed RF
+   gain (FM_AGC_OVERRIDE) must be re-applied after every tune. */
+static esp_err_t radio_fm_tune(uint32_t freq_hz)
+{
+    freq_hz = radio_round_tuned_freq(freq_hz);
+    esp_err_t err = si4732_fm_tune(&s_radio, freq_hz);
+    if (err == ESP_OK) {
+        s_ui.freq_hz = freq_hz;
+        rds_parser_reset(&s_rds);
+        /* AUTO is the chip default; only a fixed AGC needs re-applying. */
+        if (s_agc_idx >= 0) {
+            agc_apply();
+        }
+    }
+    return err;
+}
+
+/* Fast tune for ATS/spectrum scans: no settle delay, caller waits. */
+static esp_err_t radio_tune_fast(uint32_t freq_hz)
+{
+    if (s_ui.mode == RADIO_MODE_FM) {
+        return si4732_fm_tune_fast(&s_radio, freq_hz);
+    }
+    return si4732_am_tune_fast(&s_radio, freq_hz, SI4732_SSB_OFF);
 }
 
 esp_err_t radio_tune(void)
@@ -175,19 +280,20 @@ esp_err_t radio_tune(void)
     }
     esp_err_t err;
     if (s_ui.mode == RADIO_MODE_FM) {
-        err = si4732_fm_tune(&s_radio, s_ui.freq_hz);
-        if (err == ESP_OK) {
-            /* 튜닝 후 RF 이득 고정값이 유지되도록 다시 적용 */
-            rfgain_apply();
-        }
+        err = radio_fm_tune(s_ui.freq_hz);
     } else {
         si4732_sideband_t sb = SI4732_SSB_OFF;
         if (band_is_ssb(s_ui.mode) && !s_ui.patch_missing) {
             sb = radio_sideband();
         }
+        s_ui.freq_hz = radio_round_tuned_freq(s_ui.freq_hz);
         err = si4732_am_tune(&s_radio, s_ui.freq_hz, sb);
         if (err == ESP_OK && band_is_ssb(s_ui.mode) && !s_ui.patch_missing) {
             si4732_set_bfo(&s_radio, radio_bfo_value());
+            /* The SSB patch may drop AGC/AVC state after a tune command,
+               so re-apply the user settings here (not only on mode entry). */
+            agc_apply();
+            si4732_set_am_avc_max_gain(&s_radio, s_avc);
         }
     }
     if (err != ESP_OK) {
@@ -197,7 +303,7 @@ esp_err_t radio_tune(void)
             s_ssb_prepared = false;
             if (radio_ensure_mode() == ESP_OK) {
                 err = (s_ui.mode == RADIO_MODE_FM)
-                      ? si4732_fm_tune(&s_radio, s_ui.freq_hz)
+                      ? radio_fm_tune(s_ui.freq_hz)
                       : si4732_am_tune(&s_radio, s_ui.freq_hz,
                                        (band_is_ssb(s_ui.mode) && !s_ui.patch_missing)
                                        ? radio_sideband()
@@ -267,7 +373,11 @@ void set_band(int idx)
     const band_desc_t *b = &band_table[idx];
     if (b->default_mode == RADIO_MODE_FM) {
         s_ui.mode = RADIO_MODE_FM;
-    } else if (s_ui.mode == RADIO_MODE_FM || !b->ham) {
+    } else if (s_ui.mode == RADIO_MODE_FM) {
+        /* Leaving FM: adopt the band's own default (AM / LSB / USB)
+           instead of always falling back to AM. */
+        s_ui.mode = b->default_mode;
+    } else if (!b->ham) {
         s_ui.mode = RADIO_MODE_AM;
     }
     uint32_t f = ((size_t)idx < 16 && s_band_mem_valid[idx])
@@ -285,10 +395,38 @@ void set_band(int idx)
 
 static bool s_seek_hw_active;
 static uint32_t s_seek_log_ms;
+static uint8_t s_seek_err_count;
 
 static void seek_draw(void)
 {
     ui_draw_all(&s_ui);
+}
+
+/* FM seek thresholds also define the VALID-channel criterion. Keep the
+   AN332 defaults (20 dBuV / 3 dB) during normal listening and use the
+   sensitive scan values only while a seek/ATS scan is running. */
+static void fm_seek_thresholds(bool scanning)
+{
+    if (!s_radio_ok || s_radio.func != SI4732_FUNC_FM) {
+        return;
+    }
+    si4732_set_property(&s_radio, SI4732_PROP_FM_SEEK_TUNE_RSSI_THRESHOLD,
+                        scanning ? SEEK_FM_RSSI_MIN : 20);
+    si4732_set_property(&s_radio, SI4732_PROP_FM_SEEK_TUNE_SNR_THRESHOLD,
+                        scanning ? SEEK_FM_SNR_MIN : 3);
+}
+
+/* AM seek thresholds also define VALID for AM tuning; restore the
+   AN332/ATS-mini defaults (10 dBuV / 3 dB) after a seek. */
+static void am_seek_thresholds(bool scanning)
+{
+    if (!s_radio_ok || s_radio.func != SI4732_FUNC_AM) {
+        return;
+    }
+    si4732_set_property(&s_radio, SI4732_PROP_AM_SEEK_SNR_THRESHOLD,
+                        scanning ? SEEK_AM_SNR_MIN : 3);
+    si4732_set_property(&s_radio, SI4732_PROP_AM_SEEK_RSSI_THRESHOLD,
+                        scanning ? SEEK_AM_RSSI_MIN : 10);
 }
 
 static esp_err_t seek_hw_start(bool up)
@@ -297,11 +435,27 @@ static esp_err_t seek_hw_start(bool up)
     bool fm = (s_ui.mode == RADIO_MODE_FM);
     uint8_t rssi = fm ? SEEK_FM_RSSI_MIN : SEEK_AM_RSSI_MIN;
     uint8_t snr = fm ? SEEK_FM_SNR_MIN : SEEK_AM_SNR_MIN;
-    (void)si4732_tune_status(&s_radio, true, false, NULL, NULL, NULL, NULL);
+    /* Cancel any previous hardware seek and clear STC before starting a
+       new one. A stale seek would otherwise keep running while the app
+       thinks it is idle. */
+    esp_err_t cerr = si4732_tune_status(&s_radio, true, true,
+                                        NULL, NULL, NULL, NULL);
+    if (cerr != ESP_OK) {
+        ESP_LOGW(TAG, "seek pre-cancel failed (%s)", esp_err_to_name(cerr));
+    }
+    vTaskDelay(pdMS_TO_TICKS(5));
+    if (fm) {
+        fm_seek_thresholds(true);
+    } else {
+        am_seek_thresholds(true);
+    }
     ESP_LOGI(TAG, "seek start fm=%d up=%d f=%lu step=%lu thr=%u/%u",
              (int)fm, (int)up, (unsigned long)s_ui.freq_hz,
              (unsigned long)s_sw_step, rssi, snr);
-    esp_err_t err = si4732_seek_start(&s_radio, up, b->min_hz, b->max_hz,
+    /* Align the seek band bottom to the same raster as the tuning snap
+       (MW 9 kHz starts at 531 kHz, not 520 kHz). */
+    uint32_t bottom = band_snap_freq(s_ui.band_idx, b->min_hz, s_sw_step);
+    esp_err_t err = si4732_seek_start(&s_radio, up, bottom, b->max_hz,
                                       s_sw_step, rssi, snr);
     s_seek_hw_active = (err == ESP_OK);
     ESP_LOGI(TAG, "seek cmd err=%s", esp_err_to_name(err));
@@ -343,14 +497,12 @@ bool seek_start(bool up)
 
     const band_desc_t *b = &band_table[s_ui.band_idx];
     uint32_t step = eff_step_hz();
-    if (step == 0) {
-        if (s_ui.mode == RADIO_MODE_FM) {
-            step = 100000;
-        } else if (s_ui.band_idx == 1 || s_ui.band_idx == 2) {
-            step = 9000;
-        } else {
-            step = 5000;
-        }
+    if (s_ui.mode == RADIO_MODE_FM) {
+        step = 100000;
+    } else if (step < 5000u) {
+        /* 1 kHz is the wheel step, not a usable seek raster: use the band
+           raster instead (MW/LW 9 kHz, SW 5 kHz). */
+        step = (s_ui.band_idx == 1 || s_ui.band_idx == 2) ? 9000u : 5000u;
     }
 
     s_sw_step = step;
@@ -365,6 +517,7 @@ bool seek_start(bool up)
     s_ui.seeking = true;
     s_seek_started = now_ms();
     s_seek_log_ms = 0;
+    s_seek_err_count = 0;
     if (s_radio_ok) {
         si4732_set_mute(&s_radio, true);
     }
@@ -385,29 +538,49 @@ bool seek_start(bool up)
 esp_err_t seek_tune(uint32_t freq)
 {
     if (s_ui.mode == RADIO_MODE_FM) {
-        return si4732_fm_tune(&s_radio, freq);
+        return radio_fm_tune(freq);
     }
+    freq = radio_round_tuned_freq(freq);
+    s_ui.freq_hz = freq;
     return si4732_am_tune(&s_radio, freq, SI4732_SSB_OFF);
 }
 
 void seek_finish(bool found)
 {
+    /* Always stop the hardware seek. A completed seek is harmless to cancel;
+       an early/failed one must not keep scanning after the UI stops. */
+    if (s_seek_hw_active) {
+        seek_hw_cancel(NULL);
+    }
     if (!found) {
-        if (s_seek_hw_active) {
-            seek_hw_cancel(NULL);
-        }
         if (s_radio_ok) {
             s_ui.freq_hz = s_sw_orig;
             seek_tune(s_ui.freq_hz);
         }
     }
+    s_seek_err_count = 0;
     s_seek_hw_active = false;
     s_seeking = false;
     s_ui.seeking = false;
+    fm_seek_thresholds(false);
+    am_seek_thresholds(false);
     if (s_radio_ok) {
         si4732_set_mute(&s_radio, false);
     }
     if (found) {
+        /* Hardware seek changed the station without a tune command, so the
+           previous station's RDS data must be dropped here. */
+        if (s_ui.mode == RADIO_MODE_FM) {
+            rds_parser_reset(&s_rds);
+        } else {
+            /* Keep the displayed frequency on the band raster. */
+            uint32_t snapped = band_snap_freq(s_ui.band_idx, s_ui.freq_hz,
+                                              eff_step_hz());
+            if (snapped != s_ui.freq_hz) {
+                s_ui.freq_hz = snapped;
+                (void)seek_tune(snapped);
+            }
+        }
         mark_change();
         s_freq_dirty = true;
     }
@@ -432,6 +605,8 @@ void seek_cancel(void)
     }
     s_seeking = false;
     s_ui.seeking = false;
+    fm_seek_thresholds(false);
+    am_seek_thresholds(false);
     toast("SEEK STOP");
 }
 
@@ -454,34 +629,18 @@ void seek_stop(void)
     }
     mark_change();
     s_freq_dirty = true;
+    fm_seek_thresholds(false);
+    am_seek_thresholds(false);
     ui_draw_all(&s_ui);
     toast("SEEK STOP");
 }
 
 void seek_reverse(bool up)
 {
-    if (!s_seeking) {
-        return;
-    }
-    int dir = up ? 1 : -1;
-    uint32_t freq = 0;
-    if (s_seek_hw_active) {
-        if (seek_hw_cancel(&freq) != ESP_OK) {
-            seek_finish(false);
-            return;
-        }
-        if (freq) {
-            s_ui.freq_hz = band_clamp_freq(s_ui.band_idx, freq);
-        }
-    }
-    s_sw_dir = dir;
-    s_sw_orig = s_ui.freq_hz;
-    s_sw_steps = 0;
-    s_ui.sw_steps = 0;
-    s_seek_started = now_ms();
-    if (seek_hw_start(dir) != ESP_OK) {
-        seek_finish(false);
-    }
+    (void)up;
+    /* Opposite encoder turn means "stop", not "start a new seek in the
+       other direction". seek_stop() sends TUNE_STATUS CANCEL to the chip. */
+    seek_stop();
 }
 
 void seek_poll(uint32_t now)
@@ -489,8 +648,9 @@ void seek_poll(uint32_t now)
     if (!s_seeking) {
         return;
     }
-    if ((uint32_t)(now - s_seek_started) > SEEK_TIMEOUT) {
-        seek_finish(false);
+    if ((uint32_t)(now - s_seek_started) > SEEK_HW_TIMEOUT_MS) {
+        ESP_LOGW(TAG, "seek timeout -> cancel");
+        seek_finish(false);   /* seek_finish() cancels the hardware seek */
         return;
     }
 
@@ -498,23 +658,30 @@ void seek_poll(uint32_t now)
     bool stc = false;
     bool valid = false;
     bool bltf = false;
-    /* 주파수 표시를 실시간으로 따라가게 하려면 시크 중에는 INTACK 없이
-     * TUNE_STATUS를 읽는다(INTACK=1은 완료 인터럽트를 매번 지운다). */
+    /* Read TUNE_STATUS without INTACK while scanning so STCINT is not
+       cleared before completion. */
     esp_err_t err = si4732_tune_status(&s_radio, false, false,
                                        &freq, &stc, &valid, &bltf);
     if (err != ESP_OK) {
-        if ((int32_t)(now - s_seek_log_ms) >= 0) {
+        if (++s_seek_err_count >= SEEK_STATUS_RETRY) {
+            ESP_LOGW(TAG, "seek status failed %u times -> cancel",
+                     (unsigned)s_seek_err_count);
+            seek_finish(false);
+        } else if ((int32_t)(now - s_seek_log_ms) >= 0) {
             ESP_LOGW(TAG, "seek status err=%s", esp_err_to_name(err));
             s_seek_log_ms = now + 250;
         }
         return;
     }
+    s_seek_err_count = 0;
+
     if (stc || (int32_t)(now - s_seek_log_ms) >= 0) {
         ESP_LOGI(TAG, "seek poll stc=%d valid=%d bltf=%d f=%lu",
                  (int)stc, (int)valid, (int)bltf, (unsigned long)freq);
         s_seek_log_ms = now + 250;
     }
 
+    /* Update the display during the scan, independent of VALID. */
     if (freq) {
         freq = band_clamp_freq(s_ui.band_idx, freq);
         if (freq != s_ui.freq_hz) {
@@ -524,28 +691,31 @@ void seek_poll(uint32_t now)
         }
     }
 
-    /* VALID can still be set from the previous tune while the seek is
-       starting. Wait for the seek/tune complete interrupt, or fall back to
-       VALID/BLTF after the chip has had time to start scanning. */
-    bool done = stc;
-    if (!done && (uint32_t)(now - s_seek_started) >= SEEK_COMPLETE_GRACE_MS &&
-        (valid || bltf)) {
-        done = true;
-    }
-    if (!done) {
+    /* Completion is STC only. VALID/BLTF can be stale from the previous
+       tune; using them as a fallback ended the app-side seek while the
+       chip was still scanning. */
+    if (!stc) {
         return;
     }
-    if (stc) {
-        /* 완료 인터럽트 정리 + 최종 주파수 재확인 */
-        uint32_t f2 = 0;
-        bool stc2 = false, valid2 = false, bltf2 = false;
-        if (si4732_tune_status(&s_radio, true, false,
-                               &f2, &stc2, &valid2, &bltf2) == ESP_OK) {
-            if (f2) { freq = f2; }
-            valid = valid2;
-            bltf = bltf2;
+
+    /* Clear STC and read the final frequency/validity. */
+    uint32_t f2 = 0;
+    bool valid2 = false;
+    if (si4732_tune_status(&s_radio, true, false,
+                           &f2, NULL, &valid2, NULL) == ESP_OK) {
+        if (f2) {
+            freq = f2;
+        }
+        valid = valid2;
+    }
+    if (freq) {
+        freq = band_clamp_freq(s_ui.band_idx, freq);
+        if (freq != s_ui.freq_hz) {
+            s_ui.freq_hz = freq;
+            seek_progress(freq);
         }
     }
+
     if (valid && freq) {
         s_ui.freq_hz = freq;
         seek_finish(true);
@@ -560,6 +730,7 @@ void ats_cancel(void)
         return;
     }
     s_ats = ATS_DONE;
+    fm_seek_thresholds(false);
     if (s_radio_ok) {
         si4732_set_mute(&s_radio, false);
     }
@@ -584,6 +755,7 @@ void ats_finish(const char *msg)
     (void)msg;
     s_ats = ATS_DONE;
     s_ats_hold = false;
+    fm_seek_thresholds(false);
     s_ui.seeking = false;
     s_ats_list.count = s_ats_found;
     storage_save_ats(&s_ats_list);
@@ -628,25 +800,20 @@ void ats_start(void)
     s_ats_ms = now_ms();
     s_ats_freq = b->min_hz;
     s_ats_step = eff_step_hz();
-    if (s_ats_step == 0) {
-        if (s_ui.mode == RADIO_MODE_FM) {
-            s_ats_step = 100000;
-        } else if (s_ui.band_idx == 1 || s_ui.band_idx == 2) {
-            s_ats_step = 9000;
-        } else {
-            s_ats_step = 5000;
-        }
+    if (s_ui.mode == RADIO_MODE_FM) {
+        s_ats_step = 100000;
     }
+    fm_seek_thresholds(true);
     if (s_radio_ok) {
         si4732_set_mute(&s_radio, true);
     }
     s_ui.freq_hz = s_ats_freq;
-    seek_tune(s_ui.freq_hz);
+    radio_tune_fast(s_ui.freq_hz);
     s_ui.seeking = true;
     s_ui.sw_steps = 0;
     s_ui.sw_max = (int)((b->max_hz - b->min_hz) / s_ats_step) + 1;
-    s_ats_timeout_ms = (uint32_t)s_ui.sw_max * 80 + 30000;
-    s_ats_wait = now_ms() + 60;
+    s_ats_timeout_ms = (uint32_t)s_ui.sw_max * 60 + 20000;
+    s_ats_wait = now_ms() + 50;
     ui_draw_all(&s_ui);
     toast("ATS START");
 }
@@ -722,14 +889,14 @@ void ats_poll(uint32_t now)
     }
     s_ui.freq_hz = s_ats_freq;
     s_ui.sw_steps++;
-    if (seek_tune(s_ui.freq_hz) != ESP_OK) {
+    if (radio_tune_fast(s_ui.freq_hz) != ESP_OK) {
         ats_finish("ATS STOP");
         return;
     }
-    s_ats_wait = now + 60;
+    s_ats_wait = now + 50;
     /* 스캔 중에도 주파수 숫자가 따라가도록 주기적으로 갱신 */
     if ((int32_t)(now - s_ats_draw_ms) >= 0) {
-        s_ats_draw_ms = now + 150;
+        s_ats_draw_ms = now + 100;
         ui_draw_radio_freq(&s_ui);
     }
 }
@@ -792,9 +959,10 @@ esp_err_t bw_apply(void)
     case RADIO_MODE_FM:
         return si4732_set_fm_bandwidth(&s_radio, s_bw[0]);
     case RADIO_MODE_AM:
-        return si4732_set_am_bandwidth(&s_radio, (si4732_am_bandwidth_t)s_bw[1]);
+        return si4732_set_am_bandwidth(&s_radio, (si4732_am_bandwidth_t)s_bw[1],
+                                       s_am_line_filter);
     default:
-        si4732_set_am_bandwidth(&s_radio, (si4732_am_bandwidth_t)s_bw[1]);
+        /* SSB: AUDIOBW only (AM_CHANNEL_FILTER does not apply). */
         return si4732_set_ssb_mode(&s_radio, (si4732_ssb_bandwidth_t)s_bw[2],
                                    true, false, true);
     }
@@ -1090,8 +1258,8 @@ void spectrum_scan_start(void)
     s_ui.seek_mode = false;
     si4732_set_mute(&s_radio, true);
     s_ui.freq_hz = s_spec_freq;
-    seek_tune(s_spec_freq);
-    s_spec_wait = now_ms() + (s_ui.mode == RADIO_MODE_FM ? 25 : 15);
+    radio_tune_fast(s_spec_freq);
+    s_spec_wait = now_ms() + (s_ui.mode == RADIO_MODE_FM ? 40 : 30);
     ui_draw_spectrum(&s_ui, band_table[s_spec_band].name, s_spec_min,
                      s_spec_max, s_spec_rssi, s_spec_snr, s_spec_count, 0, 0,
                      false);
@@ -1151,8 +1319,8 @@ void spectrum_scan_poll(uint32_t now)
     }
     s_spec_cursor = s_spec_idx;
     s_ui.freq_hz = s_spec_freq;
-    seek_tune(s_spec_freq);
-    s_spec_wait = now + (s_ui.mode == RADIO_MODE_FM ? 25 : 15);
+    radio_tune_fast(s_spec_freq);
+    s_spec_wait = now + (s_ui.mode == RADIO_MODE_FM ? 40 : 30);
     ui_draw_spectrum(&s_ui, band_table[s_spec_band].name, s_spec_min,
                      s_spec_max, s_spec_rssi, s_spec_snr, s_spec_count,
                      s_spec_idx, s_spec_cursor, false);

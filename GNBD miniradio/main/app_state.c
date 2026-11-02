@@ -26,19 +26,19 @@ battery_state_t    s_batt;
 hmi_t s_hmi = HMI_TUNE;
 
 int     s_step_idx[3] = {-1, -1, -1};
-uint8_t s_bw[3] = {0, 3, 1};
+uint8_t s_bw[3] = {1, 3, 1};   /* FM 110 kHz (AUTO not supported on FMRX 3.0) */
 int32_t s_bfo;
 uint8_t s_brightness = 100;
 bool    s_power_save;
 bool    s_rds_on = true;
 bool    s_stereo_force = false;
-bool    s_deemph_75 = false;
+bool    s_deemph_75 = true;   /* KR/US default 75 us (Europe/JP 50 us) */
 uint16_t s_sleep_min = 0;
 uint32_t s_sleep_deadline;
 bool     s_sleep_armed;
 
 storage_ext_t s_ext;
-bool     s_agc_on = true;
+int8_t   s_agc_idx = -1;  /* -1=AUTO, 0..N=AGC off + fixed index */
 uint8_t  s_rfgain = 0;   /* 0=AUTO (RF AGC 자동) */
 uint8_t  s_softmute = 4;
 uint8_t  s_avc = 60;

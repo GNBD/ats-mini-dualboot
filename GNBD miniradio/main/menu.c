@@ -123,8 +123,41 @@ void rmenu_build(void)
             continue;
         }
         /* ATS는 FM 전용 */
-        if (g_menu_items[i].id == RM_ATS && s_ui.mode != RADIO_MODE_FM) {
+        /* Mode-specific items: hide controls that have no effect in the
+           current mode instead of letting the user change dead values. */
+        switch (g_menu_items[i].id) {
+        case RM_ATS:
+        case RM_RDS:
+        case RM_STEREO:
+        case RM_DEEMPH:
+            if (s_ui.mode != RADIO_MODE_FM) {
+                continue;
+            }
+            break;
+        case RM_AVC:
+        case RM_SOFTMUTE:
+            if (s_ui.mode == RADIO_MODE_FM) {
+                continue;
+            }
+            break;
+        case RM_LINEFLT:
+            /* AM_CHANNEL_FILTER bit8 (AMPLFLT): AM(MW/LW/SW) 전용 */
+            if (s_ui.mode != RADIO_MODE_AM) {
+                continue;
+            }
+            break;
+        case RM_RFGAIN:
+            /* merged into the unified AGC item */
             continue;
+        case RM_AGC:
+            break;
+        case RM_BFO:
+            if (!band_is_ssb(s_ui.mode)) {
+                continue;
+            }
+            break;
+        default:
+            break;
         }
         labels[n] = g_menu_items[i].label;
         s_menu_ids[n] = g_menu_items[i].id;
@@ -183,8 +216,7 @@ void rmenu_build(void)
              s_stereo_force ? "MONO" : "AUTO");
     snprintf(s_rbuf[RM_DEEMPH], sizeof(s_rbuf[RM_DEEMPH]), "%s",
              s_deemph_75 ? "75us" : "50us");
-    snprintf(s_rbuf[RM_AGC], sizeof(s_rbuf[RM_AGC]), "%s",
-             s_agc_on ? "ON" : "OFF");
+    snprintf(s_rbuf[RM_AGC], sizeof(s_rbuf[RM_AGC]), "%s", agc_label());
     if (s_rfgain == 0) {
         snprintf(s_rbuf[RM_RFGAIN], sizeof(s_rbuf[RM_RFGAIN]), "AUTO");
     } else {
@@ -194,6 +226,8 @@ void rmenu_build(void)
     snprintf(s_rbuf[RM_AVC], sizeof(s_rbuf[RM_AVC]), "%u", s_avc);
     snprintf(s_rbuf[RM_SOFTMUTE], sizeof(s_rbuf[RM_SOFTMUTE]), "%udB",
              s_softmute);
+    snprintf(s_rbuf[RM_LINEFLT], sizeof(s_rbuf[RM_LINEFLT]), "%s",
+             radio_am_line_filter() ? "ON" : "OFF");
     if (s_squelch_on) {
         int sq = mode_dsp_slot(s_ui.mode);
         snprintf(s_rbuf[RM_SQUELCH], sizeof(s_rbuf[RM_SQUELCH]), "%s%u",
@@ -406,10 +440,11 @@ int opt_sel(int page, int item)
         case RM_RDS:     return s_rds_on ? 0 : 1;
         case RM_STEREO:  return s_stereo_force ? 1 : 0;
         case RM_DEEMPH:  return s_deemph_75 ? 1 : 0;
-        case RM_AGC:     return s_agc_on ? 0 : 1;
+        case RM_AGC:     return agc_sel_index();
         case RM_RFGAIN:  return s_rfgain;
         case RM_AVC:     return s_avc;
         case RM_SOFTMUTE: return s_softmute;
+        case RM_LINEFLT: return radio_am_line_filter() ? 0 : 1;
         case RM_SQUELCH: return s_squelch_on ? s_squelch_thr[mode_dsp_slot(s_ui.mode)] : 0;
         case RM_BFO: {
             return (int)s_bfo;
@@ -468,6 +503,7 @@ void options_open(int page, int item)
     int voff = 0;
     const char *unit = NULL;
     const char *zero = NULL;
+    const char *one = NULL;
 
     if (page == HMI_MENU) {
         switch (item) {
@@ -547,8 +583,14 @@ void options_open(int page, int item)
             s_opt.title = "DEEMPHASIS";
             break;
         case RM_AGC:
-            opt_label(n++, "ON");
-            opt_label(n++, "OFF");
+            slider = true;
+            vmin = 0;
+            vmax = (int)agc_max_idx() + 1;
+            vstep = 1;
+            vval = agc_sel_index();
+            voff = -1;
+            zero = "AUTO";
+            one = "OFF";
             s_opt.title = "AGC";
             break;
         case RM_RFGAIN:
@@ -571,6 +613,11 @@ void options_open(int page, int item)
             vmin = 0; vmax = 63; vstep = 1; vval = s_softmute;
             unit = " dB";
             s_opt.title = "SOFT MUTE";
+            break;
+        case RM_LINEFLT:
+            opt_label(n++, "ON");
+            opt_label(n++, "OFF");
+            s_opt.title = "LINE FILTER";
             break;
         case RM_SQUELCH: {
             slider = true;
@@ -711,6 +758,7 @@ void options_open(int page, int item)
     s_opt.value = vval;
     s_opt.unit = unit;
     s_opt.zero_label = zero;
+    s_opt.one_label = one;
     s_opt.value_offset = voff;
 
     if (slider) {
@@ -811,15 +859,26 @@ void opt_apply(int page, int item, int idx)
             s_freq_dirty = true;
             mark_change();
             break;
-        case RM_AGC:
-            s_agc_on = (idx == 0);
-            dsp_apply();
+        case RM_AGC: {
+            int max = agc_max_idx();
+            if (idx <= 0) {
+                s_agc_idx = -1;          /* AUTO */
+            } else if (idx == 1) {
+                s_agc_idx = 0;           /* OFF (index 0) */
+            } else {
+                int v = idx - 1;         /* 1..N */
+                if (v < 1) v = 1;
+                if (v > max) v = max;
+                s_agc_idx = (int8_t)v;
+            }
+            agc_apply();
             s_freq_dirty = true;
             mark_change();
             break;
+        }
         case RM_RFGAIN:
             s_rfgain = (uint8_t)((idx < 0) ? 0 : (idx > 27 ? 27 : idx));
-            rfgain_apply();
+            agc_apply();
             mark_change();
             break;
         case RM_AVC:
@@ -831,6 +890,11 @@ void opt_apply(int page, int item, int idx)
         case RM_SOFTMUTE:
             s_softmute = (uint8_t)((idx < 0) ? 0 : (idx > 63 ? 63 : idx));
             dsp_apply();
+            s_freq_dirty = true;
+            mark_change();
+            break;
+        case RM_LINEFLT:
+            radio_set_am_line_filter(idx == 0);
             s_freq_dirty = true;
             mark_change();
             break;
@@ -1098,9 +1162,12 @@ int quick_build(uint8_t *out)
         if (!(s_quick_mask & (1u << i))) {
             continue;
         }
-        /* ATS는 FM 전용 */
-        if ((i == QA_ATS_LIST || i == QA_ATS_RUN) &&
-            s_ui.mode != RADIO_MODE_FM) {
+        bool fm = (s_ui.mode == RADIO_MODE_FM);
+        if ((i == QA_ATS_LIST || i == QA_ATS_RUN ||
+             i == QA_RDS || i == QA_STEREO) && !fm) {
+            continue;
+        }
+        if (i == QA_SCAN && band_is_ssb(s_ui.mode)) {
             continue;
         }
         out[n++] = (uint8_t)i;
@@ -1115,7 +1182,9 @@ void quick_exec(int qa)
         open_volume(false);
         break;
     case QA_ATS_LIST:
-        open_ats_list();
+        if (s_ui.mode == RADIO_MODE_FM) {
+            open_ats_list();
+        }
         break;
     case QA_FAVORITES:
         open_favorites();
@@ -1127,32 +1196,46 @@ void quick_exec(int qa)
         ui_draw_all(&s_ui);
         break;
     case QA_SEEK:
-        menu_action(RM_SEEK);
+        /* Do not route through menu_action(): it expects a filtered
+           menu cursor position, not an RM_* id. */
+        page_radio();
+        s_hmi = HMI_SEEK;
+        s_ui.seek_mode = true;
+        s_nav_ms = now_ms();
+        toast("SEEK: turn");
         break;
     case QA_SCAN:
-        spectrum_scan_start();
+        if (!band_is_ssb(s_ui.mode)) {
+            spectrum_scan_start();
+        }
         break;
     case QA_ATS_RUN:
-        page_radio();
-        ats_start();
+        if (s_ui.mode == RADIO_MODE_FM) {
+            page_radio();
+            ats_start();
+        }
         break;
     case QA_RDS:
-        s_rds_on = !s_rds_on;
-        s_ui.rds_on = s_rds_on;
-        if (s_radio_ok && s_ui.mode == RADIO_MODE_FM) {
-            si4732_rds_enable(&s_radio, s_rds_on);
+        if (s_ui.mode == RADIO_MODE_FM) {
+            s_rds_on = !s_rds_on;
+            s_ui.rds_on = s_rds_on;
+            if (s_radio_ok) {
+                si4732_rds_enable(&s_radio, s_rds_on);
+            }
+            rds_parser_reset(&s_rds);
+            mark_change();
+            page_radio();
         }
-        rds_parser_reset(&s_rds);
-        mark_change();
-        page_radio();
         break;
     case QA_STEREO:
-        s_stereo_force = !s_stereo_force;
-        if (s_radio_ok) {
-            si4732_set_stereo(&s_radio, s_stereo_force);
+        if (s_ui.mode == RADIO_MODE_FM) {
+            s_stereo_force = !s_stereo_force;
+            if (s_radio_ok) {
+                si4732_set_stereo(&s_radio, s_stereo_force);
+            }
+            mark_change();
+            page_radio();
         }
-        mark_change();
-        page_radio();
         break;
     case QA_BAND:
         set_band((s_ui.band_idx + 1) % (int)band_count);
