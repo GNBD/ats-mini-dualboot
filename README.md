@@ -16,8 +16,8 @@ Power on
        └─ app1  (0x390000)  firmware B
 ```
 
-> **Work in progress.** This is a test build. Bugs, failed boots or data loss
-> are possible. The partition layout changed from v3.x, so upgrading may reset
+> 
+> Please open an issue if you encounter bugs, boot failures, or data loss. If possible, please include a serial log.
 > internal storage. N16R8 (16MB flash + 8MB PSRAM) only.
 
 ---
