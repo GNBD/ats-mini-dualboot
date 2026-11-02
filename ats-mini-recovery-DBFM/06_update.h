@@ -480,14 +480,25 @@ static int loadUrlList(String *urls, int maxCount)
   return n;
 }
 
+// Network phases reuse the firmware download screen. The percentage is only
+// known once bytes are flowing; list/size probes show the same panel at 0%.
+static void showNetworkWait(const char *line)
+{
+  drawUpdateProgress(0, "Please wait...", line);
+}
+
 static bool downloadToFile(const String &url, const String &fname)
 {
+  drawUpdateProgress(0, "Connecting...", fname.c_str());
+
   HTTPClient http;
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.setTimeout(20000);
   if(!http.begin(url)) return false;
 
+  waitAnimStart();
   int code = http.GET();
+  waitAnimStop();
   if(code != HTTP_CODE_OK)
   {
     http.end();
@@ -522,11 +533,8 @@ static bool downloadToFile(const String &url, const String &fname)
   uint32_t lastData = millis();
   WiFiClient *stream = http.getStreamPtr();
 
-  gSprite.fillScreen(COL_BG);
-  drawHeader("DOWNLOAD");
-  gSprite.setTextColor(COL_TEXT, COL_BG);
-  gSprite.drawString(fname, 10, 40, FONT_SMALL);
-  gSprite.pushSprite(0, 0);
+  drawUpdateProgress(0, "Downloading...", fname.c_str());
+  if(total <= 0) waitAnimStart();  // unknown length: sweep instead of a frozen bar
 
   while(http.connected() || stream->available())
   {
@@ -558,6 +566,7 @@ static bool downloadToFile(const String &url, const String &fname)
 
   out.close();
   http.end();
+  if(total <= 0) waitAnimStop();
 
   bool ok = (total > 0) ? (got == total) : (got > 0);
   if(!ok) LittleFS.remove("/" + fname);
@@ -641,10 +650,222 @@ static int downloadAllFromUrls()
   return 1;
 }
 
-static bool downloadOneFromUrls(String &outName)
+// Network waits block the sketch task, so the progress bar is animated from a
+// low-priority task. It only touches the bar strip and never runs while the
+// sketch task draws, because stop() waits for it to exit.
+static volatile bool gWaitRun = false;
+static volatile int  gWaitPercent = -1;
+static volatile TaskHandle_t gWaitTask = nullptr;
+
+static void waitAnimTask(void *)
 {
+  // Draw straight to the panel: pushing the whole sprite every frame was
+  // competing with the network task and made the connection feel slower.
+  const int bx = 36, by = 102, bw = 246;
+  const int seg = 60;
+  const int span = bw - seg - 6;
+  int pos = 0;
+  int dir = 12;
+  int stepDir = 1;
+
+  while(gWaitRun)
+  {
+    if(!gUiQuiet)
+    {
+      tft.fillRoundRect(bx, by, bw, 18, 9, COL_TRACK);
+      if(gWaitPercent >= 0)
+      {
+        int fw = (bw - 6) * gWaitPercent / 100;
+        if(fw > 0) tft.fillRoundRect(bx + 3, by + 3, fw, 12, 6, COL_ACC);
+      }
+      else
+      {
+        tft.fillRoundRect(bx + 3 + pos, by + 3, seg, 12, 6, COL_ACC);
+        // Ping-pong: left -> right -> left.
+        pos += dir * stepDir;
+        if(pos >= span)
+        {
+          pos = span;
+          stepDir = -1;
+        }
+        else if(pos <= 0)
+        {
+          pos = 0;
+          stepDir = 1;
+        }
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(70));
+  }
+  gWaitTask = nullptr;
+  vTaskDelete(NULL);
+}
+
+static void waitAnimStart()
+{
+  if(gWaitTask) return;
+  gWaitRun = true;
+  gWaitPercent = -1;
+  xTaskCreatePinnedToCore(waitAnimTask, "waitanim", 4096, nullptr, 1,
+                          (TaskHandle_t *)&gWaitTask, 0);
+}
+
+static void waitAnimStop()
+{
+  if(!gWaitTask) return;
+  gWaitRun = false;
+  uint32_t start = millis();
+  while(gWaitTask && (millis() - start) < 1000) delay(5);
+  gWaitTask = nullptr;
+}
+
+// Ask the server for the image size without keeping the body. GitHub redirects
+// are followed, so the final asset host supplies the length.
+static int fetchContentLength(const String &url)
+{
+  HTTPClient http;
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setTimeout(8000);
+  if(!http.begin(url)) return -1;
+  waitAnimStart();
+  // HEAD keeps the body off the wire; a GET probe used to start a full
+  // transfer and then abort it, which added a noticeable delay.
+  int code = http.sendRequest("HEAD");
+  int len = -1;
+  if(code == HTTP_CODE_OK) len = http.getSize();
+  http.end();
+  waitAnimStop();
+  return len;
+}
+
+static String sizeLabel(int bytes)
+{
+  if(bytes <= 0) return "unknown";
+  char buf[48];
+  snprintf(buf, sizeof(buf), "%d.%02d MB (%d B)",
+           bytes / (1024 * 1024),
+           ((bytes % (1024 * 1024)) * 100) / (1024 * 1024),
+           bytes);
+  return String(buf);
+}
+
+// Large confirmation popup before a download. Keeps the normal dark panel; the
+// frame uses the theme accent and the label/value columns are aligned. Shows
+// the firmware name, expected size, target slot and the full source (URL or
+// file path), scrolling when the source line does not fit.
+static void drawFirmwareModal(const String &title, const String &name,
+                              const String &size, int targetSlot,
+                              const char *sourceLabel, const String &source,
+                              bool flash, int scroll)
+{
+  gSprite.fillRoundRect(8, 10, 304, 150, 10, COL_PANEL);
+  gSprite.drawRoundRect(8, 10, 304, 150, 10, COL_ACC);
+
+  gSprite.setTextDatum(TC_DATUM);
+  gSprite.setTextColor(COL_ACC, COL_PANEL);
+  gSprite.drawString(title.c_str(), 160, 18, FONT_LARGE);
+  gSprite.fillRect(20, 44, 280, 1, COL_LINE);
+
+  const int lx = 18, vx = 98;
+  gSprite.setTextDatum(TL_DATUM);
+
+  gSprite.setTextColor(COL_MUTED, COL_PANEL);
+  gSprite.drawString("Firmware:", lx, 50, FONT_TINY);
+  gSprite.setTextColor(COL_TEXT, COL_PANEL);
+  gSprite.setClipRect(vx, 50, 304 - vx, 10);
+  gSprite.drawString(name.c_str(), vx, 50, FONT_TINY);
+  gSprite.clearClipRect();
+
+  gSprite.setTextColor(COL_MUTED, COL_PANEL);
+  gSprite.drawString("Size:", lx, 64, FONT_TINY);
+  gSprite.setTextColor(COL_TEXT, COL_PANEL);
+  gSprite.drawString(size.c_str(), vx, 64, FONT_TINY);
+
+  gSprite.setTextColor(COL_MUTED, COL_PANEL);
+  gSprite.drawString("Target:", lx, 78, FONT_TINY);
+  gSprite.setTextColor(COL_TEXT, COL_PANEL);
+  gSprite.drawString((String("App") + String(targetSlot)).c_str(), vx, 78, FONT_TINY);
+
+  gSprite.setTextColor(COL_MUTED, COL_PANEL);
+  gSprite.drawString(sourceLabel, lx, 92, FONT_TINY);
+
+  gSprite.fillRoundRect(16, 101, 288, 14, 4, COL_CELL);
+  gSprite.setClipRect(18, 101, 284, 14);
+  gSprite.setTextColor(COL_MUTED, COL_CELL);
+  gSprite.drawString(source.c_str(), 18 - scroll, 103, FONT_TINY);
+  gSprite.clearClipRect();
+
+  const int by = 126, bw = 132, bh = 22;
+  const int bx[2] = {18, 170};
+  gSprite.setTextDatum(TC_DATUM);
+  for(int i = 0; i < 2; i++)
+  {
+    bool sel = (i == 0) ? !flash : flash;
+    uint16_t acc = (i == 0) ? COL_ACC : COL_WARN;
+    uint16_t bg = sel ? (i == 0 ? COL_PANEL2 : COL_WARN) : COL_PANEL;
+    uint16_t fg = sel ? (i == 0 ? COL_TEXT : COL_BG) : COL_MUTED;
+    gSprite.fillRoundRect(bx[i], by, bw, bh, 6, bg);
+    gSprite.drawRoundRect(bx[i], by, bw, bh, 6, sel ? acc : COL_LINE);
+    gSprite.setTextColor(fg, bg);
+    gSprite.drawString(i == 0 ? "CANCEL" : "FLASH",
+                       bx[i] + bw / 2, by + 5, FONT_SMALL);
+  }
+  gSprite.setTextDatum(TL_DATUM);
+  gSprite.pushSprite(0, 0);
+}
+
+static bool firmwareConfirmModal(const String &title, const String &name,
+                                 int size, int targetSlot,
+                                 const char *sourceLabel, const String &source)
+{
+  String sizeText = sizeLabel(size);
+  int srcW = gSprite.textWidth(source.c_str(), FONT_TINY);
+  bool flash = false;                    // default: cancel
+  int scroll = 0;
+  uint32_t scrollAt = millis();
+
+  drawFirmwareModal(title, name, sizeText, targetSlot, sourceLabel, source,
+                    flash, scroll);
+
+  for(;;)
+  {
+    if(srcW > 280 && millis() - scrollAt >= 100)
+    {
+      scrollAt = millis();
+      scroll += 2;
+      if(scroll > srcW + 30) scroll = 0;
+      // Only the source strip changes; the rest of the modal stays composed.
+      gSprite.fillRoundRect(16, 101, 288, 14, 4, COL_CELL);
+      gSprite.setClipRect(18, 101, 284, 14);
+      gSprite.setTextDatum(TL_DATUM);
+      gSprite.setTextColor(COL_MUTED, COL_CELL);
+      gSprite.drawString(source.c_str(), 18 - scroll, 103, FONT_TINY);
+      gSprite.clearClipRect();
+      gSprite.pushSprite(0, 0);
+    }
+
+    int8_t d = readEncoder();
+    if(d)
+    {
+      flash = !flash;
+      drawFirmwareModal(title, name, sizeText, targetSlot, sourceLabel, source,
+                        flash, scroll);
+    }
+
+    BtnEvent ev = readButtonEvent();
+    if(ev == BTN_CLICK) return flash;
+    if(ev == BTN_HOLD) return false;
+    delay(10);
+  }
+}
+
+static bool downloadOneFromUrls(String &outName, int targetSlot)
+{
+  showNetworkWait("Fetching firmware list");
+  waitAnimStart();
   String urls[MAX_URLS];
   int urlCount = loadUrlList(urls, MAX_URLS);
+  waitAnimStop();
   if(urlCount == 0)
   {
     gSprite.fillScreen(COL_BG);
@@ -659,18 +880,43 @@ static bool downloadOneFromUrls(String &outName)
     return false;
   }
 
+  // The list shows the downloaded file name instead of the full URL. Repeated
+  // names get a number so two entries from different hosts stay distinct.
+  String labels[MAX_URLS];
   const char *pick[MAX_URLS];
-  for(int i = 0; i < urlCount; i++) pick[i] = urls[i].c_str();
-
-  int sel = 0;
-  if(urlCount > 1)
+  for(int i = 0; i < urlCount; i++)
   {
-    sel = runChoice("FIRMWARE", "Select firmware:", pick, urlCount);
-    if(sel < 0) return false;
+    labels[i] = urlToFileName(urls[i]);
+    for(int j = 0; j < i; j++)
+    {
+      if(labels[j] == labels[i])
+      {
+        labels[i] += " (";
+        labels[i] += String(i + 1);
+        labels[i] += ")";
+        break;
+      }
+    }
+    pick[i] = labels[i].c_str();
   }
 
-  String fname = urlToFileName(pick[sel]);
-  if(downloadToFile(pick[sel], fname))
+  int sel = 0;
+  for(;;)
+  {
+    if(urlCount > 1)
+    {
+      sel = runChoice("FIRMWARE", "Select firmware:", pick, urlCount);
+      if(sel < 0) return false;
+    }
+    showNetworkWait("Reading firmware size");
+    int size = fetchContentLength(urls[sel]);
+    if(firmwareConfirmModal("Network Flash", labels[sel], size, targetSlot,
+                            "Source URL:", urls[sel])) break;
+    if(urlCount <= 1) return false;      // nothing else to go back to
+  }
+
+  String fname = urlToFileName(urls[sel]);
+  if(downloadToFile(urls[sel], fname))
   {
     outName = fname;
     return true;
@@ -687,8 +933,8 @@ static bool downloadOneFromUrls(String &outName)
   return false;
 }
 
-// Source -> slot -> firmware. Local files and network downloads both flash
-// immediately after selection (no extra confirmation).
+// Source -> slot -> firmware. Local files flash immediately; network downloads
+// show a confirmation modal with the name, size and source URL first.
 static void runFirmwareUpdate()
 {
   static const char *sourceNames[] = {"Local files", "Network"};
@@ -731,7 +977,7 @@ static void runFirmwareUpdate()
   if(srcSel == 1)
   {
     String fname;
-    if(!downloadOneFromUrls(fname)) return;
+    if(!downloadOneFromUrls(fname, slotSel)) return;
     flashNow(fname, true);
     return;
   }
@@ -778,6 +1024,18 @@ static void runFirmwareUpdate()
       gSprite.drawString("Wait for it to finish", 8, 80, FONT_SMALL);
       gSprite.pushSprite(0, 0);
       delay(1200);
+      drawFilePage(files, fileCount, fileSel, slotNames[slotSel]);
+      continue;
+    }
+
+    File localFile = LittleFS.open("/" + files[fileSel], "r");
+    int localSize = localFile ? (int)localFile.size() : -1;
+    if(localFile) localFile.close();
+
+    if(!firmwareConfirmModal("Local Flash", files[fileSel], localSize, slotSel,
+                             "Source file:",
+                             String("LittleFS:/") + files[fileSel]))
+    {
       drawFilePage(files, fileCount, fileSel, slotNames[slotSel]);
       continue;
     }

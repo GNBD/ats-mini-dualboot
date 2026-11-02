@@ -1,6 +1,6 @@
 # DBFM — DualBoot Firmware Manager
 
-**v4.3.4 (DES)** · ESP32-S3 **N16R8** · SI4732 receiver
+**v4.3.5 (DES)** · ESP32-S3 **N16R8** · SI4732 receiver
 
 ### [One-click web flasher](https://gnbd.github.io/ats-mini-dualboot/install.html) · [원클릭 웹 플래셔](https://gnbd.github.io/ats-mini-dualboot/install.html)
 
@@ -34,7 +34,9 @@ Power on
   ACTIVE/STANDBY/EMPTY state.
 - **App slot info** — Default boot / Hold mode / Info (build date, IDF, slot
   size, source file name and install time when recorded by an internal OTA).
-- **OTA updates** — local file or network URL, then automatic flash.
+- **OTA updates** — local file or network URL. Network entries are listed by
+  file name, then a confirmation modal shows the name, expected size, target
+  slot and the full (scrolling) source URL before download and flash.
 - **DBFM OTA** — download the latest `DBFMupdater.bin` from GitHub and
   install it into **app0** to update the recovery. A large **DO NOT POWER OFF**
   warning explains that app0 is erased before the transfer starts. app1 and the
@@ -93,21 +95,21 @@ Full install:
 | `ats-mini-bootloader-v4.bin` | `0x0` |
 | `ats-mini-partitions-v4.bin` | `0x8000` |
 | `boot_app0.bin` | `0xE000` |
-| `ats-mini-recovery-4.3.4.bin` | `0x860000` |
+| `ats-mini-recovery-4.3.5.bin` | `0x860000` |
 
 ```sh
 uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 \
   write-flash 0x0 ats-mini-bootloader-v4.bin \
               0x8000 ats-mini-partitions-v4.bin \
               0xE000 boot_app0.bin \
-              0x860000 ats-mini-recovery-4.3.4.bin
+              0x860000 ats-mini-recovery-4.3.5.bin
 ```
 
 Recovery-only update (bootloader and partition table unchanged):
 
 ```sh
 uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 \
-  write-flash 0x860000 ats-mini-recovery-4.3.4.bin
+  write-flash 0x860000 ats-mini-recovery-4.3.5.bin
 ```
 
 ### Apps and updates
@@ -205,7 +207,7 @@ See `NOTICE`, `LICENSE`, and `LICENSES/`.
   주소(`0xF9D000` / `0xFBD000`)가 달라 설정이 섞이지 않음
 - **펌웨어 정보** — 슬롯별 실제 펌웨어 이름·버전·ACTIVE/STANDBY/EMPTY
 - **슬롯 Info** — 빌드 날짜, IDF, 슬롯 크기, 내부 OTA로 기록된 파일명·설치 시각
-- **OTA** — 로컬 파일 또는 네트워크 URL 선택 후 자동 플래시
+- **OTA** — 로컬 파일 또는 네트워크 URL. 네트워크 목록은 파일명으로 표시되고, 선택 시 파일명·예상 크기·대상 슬롯·전체 소스 URL(길면 스크롤)을 보여주는 확인 모달이 뜼 다음 다운로드·플래시합니다
 - **DBFM OTA** — 최신 `DBFMupdater.bin`을 내려받아 **app0**에 설치하고 리커버리를 갱신합니다. 시작 전 큰 경고 모달에서 app0 펌웨어가 삭제된다는 점과 전원을 끄지 말라는 주의사항을 표시합니다. app1과 실행 중인 리커버리는 그대로 두어집니다.
 - **Boot menu always** — 스플래시 생략, 마지막 슬롯 자동 포커스, 5초 무입력 시
   자동 부팅. 엔코더 조작 시 카운트 취소 후 메뉴 유지
@@ -245,21 +247,21 @@ uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 921600 \
 | `ats-mini-bootloader-v4.bin` | `0x0` |
 | `ats-mini-partitions-v4.bin` | `0x8000` |
 | `boot_app0.bin` | `0xE000` |
-| `ats-mini-recovery-4.3.4.bin` | `0x860000` |
+| `ats-mini-recovery-4.3.5.bin` | `0x860000` |
 
 ```sh
 uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 \
   write-flash 0x0 ats-mini-bootloader-v4.bin \
               0x8000 ats-mini-partitions-v4.bin \
               0xE000 boot_app0.bin \
-              0x860000 ats-mini-recovery-4.3.4.bin
+              0x860000 ats-mini-recovery-4.3.5.bin
 ```
 
 리커버리만 갱신:
 
 ```sh
 uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 \
-  write-flash 0x860000 ats-mini-recovery-4.3.4.bin
+  write-flash 0x860000 ats-mini-recovery-4.3.5.bin
 ```
 
 ### 앱 슬롯

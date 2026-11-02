@@ -92,7 +92,21 @@ static String urlToFileName(const String &url);
 static void appendUrlLines(const String &text, String *urls, int maxCount, int &n);
 static bool fetchTextUrl(const String &url, String &out);
 static int loadUrlList(String *urls, int maxCount);
+static void showNetworkWait(const char *line);
+static void waitAnimTask(void *);
+static void waitAnimStart();
+static void waitAnimStop();
 static bool downloadToFile(const String &url, const String &fname);
+static int fetchContentLength(const String &url);
+static String sizeLabel(int bytes);
+static void drawFirmwareModal(const String &title, const String &name,
+                              const String &size, int targetSlot,
+                              const char *sourceLabel, const String &source,
+                              bool flash, int scroll);
+static bool firmwareConfirmModal(const String &title, const String &name,
+                                 int size, int targetSlot,
+                                 const char *sourceLabel, const String &source);
+static bool downloadOneFromUrls(String &outName, int targetSlot);
 static int downloadAllFromUrls();
 static void runFirmwareUpdate();
 static void runDbfmOta();
