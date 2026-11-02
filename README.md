@@ -2,7 +2,7 @@
 
 **v4.3.5 (DES)** · ESP32-S3 **N16R8** · SI4732 receiver
 
-https://private-user-images.githubusercontent.com/84258409/690203054-aa8a73c2-de93-4fcf-b7b7-708fb8ac3fe4.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3OTM2MzI2NDIsIm5iZiI6MTc5MzYzMjM0MiwicGF0aCI6Ii84NDI1ODQwOS82OTAyMDMwNTQtYWE4YTczYzItZGU5My00ZmNmLWI3YjctNzA4ZmI4YWMzZmU0LnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjExMDIlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYxMTAyVDE1MTIyMlomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTcwODcxMmQxMjkyYjUxZTQ4ZWM1MDkzNGQwNDczMDI3Y2IzMWNhYTQ1YWI1MjI0YjY2NjlkMzQ0NmZhZWJhYzMmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0JnJlc3BvbnNlLWNvbnRlbnQtdHlwZT1pbWFnZSUyRnBuZyJ9.ks31MICXbQkRqDsaLdcw9clE0C2yetBKSXzm-j-PRCE
+<img width="320" height="170" alt="image" src="https://github.com/user-attachments/assets/2a33a5f3-3b25-4fad-bbbf-bb6d3dfb1cea" />
 
 ### [One-click web flasher](https://gnbd.github.io/ats-mini-dualboot/install.html) · [원클릭 웹 플래셔](https://gnbd.github.io/ats-mini-dualboot/install.html)
 
