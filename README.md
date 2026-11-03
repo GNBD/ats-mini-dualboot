@@ -171,9 +171,6 @@ table from the image if it detects a mismatch.
 
 ### Notes
 
-- Recovery **cannot self-OTA** while running from `ota_2`; reflash it at
-  `0x860000` over USB. A dedicated updater partition is planned for v5.
-- External full-flash/merged images can break the DES tables; use slot images.
 - The web server is always on in recovery; the former on/off toggle was removed.
 - Screenshot endpoints allocate PSRAM buffers and are intended for diagnostics.
 
