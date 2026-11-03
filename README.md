@@ -117,7 +117,6 @@ uvx --from esptool esptool.py --chip esp32s3 --port COM7 --baud 460800 \
 ### Apps and updates
 
 - app0: `0x010000`, app1: `0x390000`, 3.5MB each.
-- Use an **ESP32-S3 OTA app image**, not a merged/full-flash image.
 - From DBFM: `OTA → source → slot → firmware`; network sources download and
   flash automatically.
 - From the web UI: **Firmware → Upload**; choose “Save to storage”, “flash to
