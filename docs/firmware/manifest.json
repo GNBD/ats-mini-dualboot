@@ -1,5 +1,5 @@
-{
-  "version": "v4.3.5 (DES)",
+﻿{
+  "version": "v4.3.5 (DES) - New Splash",
   "files": [
     { "name": "ats-mini-bootloader-v4.bin",    "offset": 0 },
     { "name": "ats-mini-partitions-v4.bin",    "offset": 32768 },
